@@ -42,7 +42,7 @@ const TILE_OPEN = 3;
 const TILE_BRIDGE = 10;
 const TILE_PIT = 5;
 const TILE_GEM_UI = 6;
-// const TILE_INVISIBLE = 7;
+const TILE_GEM_UNLIT = 7;
 const TILE_CRACKED = 8;
 const TILE_SHOVEL = 9;
 const TILE_BRIDGE_OVER_STONE = 11;
@@ -119,7 +119,7 @@ function canSeeThrough(tile) {
   return !isSolid(tile);
 }
 function canWalkThrough(tile) {
-  return tile === TILE_BRIDGE || tile === TILE_OPEN || tile === TILE_GEM;
+  return tile === TILE_BRIDGE || tile === TILE_OPEN || tile === TILE_GEM || tile === TILE_GEM_UNLIT;
 }
 
 let debug_zoom = engine.DEBUG;
@@ -142,7 +142,7 @@ let raycast = (function () {
   let t_max = vec2();
   let t_delta = vec2();
   return function raycastFn(level, startpos, dir, max_len, dvis) {
-    let { map, lit, visible } = level;
+    let { map, lit } = level;
     v2floor(walk, startpos);
     // init
     for (let ii = 0; ii < 2; ++ii) {
@@ -162,8 +162,8 @@ let raycast = (function () {
       }
     }
 
-    lit[walk[1]][walk[0]] = min(1, lit[walk[1]][walk[0]] + dvis);
-    level.setCellVisible(walk[0], walk[1]);
+    let lit_value = lit[walk[1]][walk[0]] = min(1, lit[walk[1]][walk[0]] + dvis);
+    level.setCellVisible(walk[0], walk[1], lit_value);
     // walk
     let ret = 0;
     // let backidx = 0;
@@ -178,8 +178,8 @@ let raycast = (function () {
       walk[minidx] += step[minidx];
       t_max[minidx] += t_delta[minidx];
       let cur_lit = lit[walk[1]][walk[0]] = min(1, lit[walk[1]][walk[0]] + dvis);
-      if (cur_lit > 0.1 && !visible[walk[1]][walk[0]]) {
-        level.setCellVisible(walk[0], walk[1]);
+      if (cur_lit > 0.1) { // && !visible[walk[1]][walk[0]]) {
+        level.setCellVisible(walk[0], walk[1], cur_lit);
       }
       ret = !canSeeThrough(map[walk[1]][walk[0]]);
       dvis *= 0.9;
@@ -267,9 +267,9 @@ class Level {
     for (let ii = 0; ii < 20; ++ii) {
       let x = 1 + rand.range(BOARD_W - 2);
       let y = 1 + rand.range(BOARD_H - 2);
-      if (map[y][x] !== TILE_GEM) {
+      if (map[y][x] !== TILE_GEM_UNLIT) {
         --num_gems;
-        map[y][x] = TILE_GEM;
+        map[y][x] = TILE_GEM_UNLIT;
         gem_sets.push({ x, y, pts: [[x,y]] });
       }
     }
@@ -282,11 +282,11 @@ class Level {
       if (yy < 1 || yy >= BOARD_H - 1 || xx < 1 || xx >= BOARD_W - 1) {
         continue;
       }
-      if (map[yy][xx] === TILE_GEM) {
+      if (map[yy][xx] === TILE_GEM_UNLIT) {
         continue;
       }
       --num_gems;
-      map[yy][xx] = TILE_GEM;
+      map[yy][xx] = TILE_GEM_UNLIT;
       set.pts.push([xx,yy]);
       if (delta.length > 2) {
         xx = pt[0] + delta[2];
@@ -363,7 +363,7 @@ class Level {
             cc = v3lerp(temp_color, lrow[xx], color_unlit, color);
           }
           let zz = z;
-          if (tile === TILE_GEM) {
+          if (tile === TILE_GEM || tile === TILE_GEM_UNLIT) {
             sprite_tiles.draw({
               x: xx * TILE_W,
               y: yy * TILE_W,
@@ -397,29 +397,30 @@ class Level {
 
   activateParticles() {
     this.particles = true;
-    for (let yy = 0; yy < BOARD_H; ++yy) {
-      for (let xx = 0; xx < BOARD_W; ++xx) {
-        if (this.map[yy][xx] === TILE_GEM && this.visible[yy][xx]) {
-          engine.glov_particles.createSystem(particle_data.defs.gem_found,
-            [(xx + 0.5) * TILE_W, (yy + 0.5) * TILE_W, Z.PARTICLES]
-          );
-        }
-      }
-    }
+    // for (let yy = 0; yy < BOARD_H; ++yy) {
+    //   for (let xx = 0; xx < BOARD_W; ++xx) {
+    //     if (this.map[yy][xx] === TILE_GEM && this.visible[yy][xx]) {
+    //       engine.glov_particles.createSystem(particle_data.defs.gem_found,
+    //         [(xx + 0.5) * TILE_W, (yy + 0.5) * TILE_W, Z.PARTICLES]
+    //       );
+    //     }
+    //   }
+    // }
   }
 
-  setCellVisible(x, y) {
+  setCellVisible(x, y, lit_value) {
     if (!this.visible[y][x]) {
-      if (this.map[y][x] === TILE_GEM) {
-        if (this.particles) {
-          ui.playUISound('gem_found');
-          engine.glov_particles.createSystem(particle_data.defs.gem_found,
-            [(x + 0.5) * TILE_W, (y + 0.5) * TILE_W, Z.PARTICLES]
-          );
-        }
-        this.gems_found++;
-      }
       this.visible[y][x] = true;
+    }
+    if (this.map[y][x] === TILE_GEM_UNLIT && lit_value > 0.5) {
+      if (this.particles) {
+        ui.playUISound('gem_found');
+        engine.glov_particles.createSystem(particle_data.defs.gem_found,
+          [(x + 0.5) * TILE_W, (y + 0.5) * TILE_W, Z.PARTICLES]
+        );
+      }
+      this.map[y][x] = TILE_GEM;
+      this.gems_found++;
     }
   }
 
@@ -634,6 +635,10 @@ class GameState {
         }
       } else if (cur_tile === TILE_GEM) {
         message = 'This is a Gem, it will be collected when you leave the level.';
+        highlightTile(ax, ay, pico8.colors[10]);
+        message_style = style_hint;
+      } else if (cur_tile === TILE_GEM_UNLIT) {
+        message = 'This is a Gem, you must get close to claim it.';
         highlightTile(ax, ay, pico8.colors[10]);
         message_style = style_hint;
       } else if (cur_tile === TILE_BRIDGE) {
