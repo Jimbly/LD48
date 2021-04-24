@@ -3,10 +3,8 @@ Untitled - LD48 - Deeper and deeper
 
 Ludum Dare 45 Entry by Jimbly
 
-game over detection
-obstacles
-accelerate if running long distances
 drill skips over empty spaces in the first 5, to match the displaced dig chart?
+game over detection
 
 particles upon shovel; drill; drill expire
 tutorial

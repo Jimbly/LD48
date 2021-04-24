@@ -77,6 +77,8 @@ let sprite_dwarf;
 let player_animation;
 let anim_drill;
 
+const ANIM_DIR = ['idle_left', 'idle_right', 'idle_up', 'idle_down'];
+
 const DX = [-1, 1, 0, 0];
 const DY = [0, 0, -1, 1];
 
@@ -579,6 +581,7 @@ class GameState {
     this.next_level = new Level(mashString(`2.${random()}`), this.noise_3d, this.level + 1);
     this.cur_level.addOpenings(this.next_level);
     this.pos = this.cur_level.spawn_pos.slice(0);
+    this.run_time = 0;
     player_animation.setState('idle_down');
     this.player_dir = 3; // down
     this.active_pos = vec2();
@@ -854,6 +857,15 @@ class GameState {
     ui.playUISound('drill_block');
   }
 
+  setPlayerDir(dir) {
+    if (this.player_dir === dir) {
+      return;
+    }
+    player_animation.setState(ANIM_DIR[dir]);
+    this.player_dir = dir;
+    this.run_time = 0;
+  }
+
   update() {
     if (this.active_drill) {
       this.updateDrill();
@@ -867,34 +879,36 @@ class GameState {
     let { pos, cur_level } = this;
     let ix = floor(pos[0]);
     let iy = floor(pos[1]);
+    let speed = 0.005;
     if (abs(dx) + abs(dy)) {
+      this.run_time += engine.frame_dt;
+      if (this.run_time > 800) {
+        speed *= 1.5;
+      }
       if (abs(dx) > abs(dy)) {
         if (dx < 0) {
           this.target_pos = [floor(pos[0] - 0.5), iy];
-          player_animation.setState('idle_left');
-          this.player_dir = 0;
+          this.setPlayerDir(0);
         } else {
           this.target_pos = [floor(pos[0] + 0.5), iy];
-          player_animation.setState('idle_right');
-          this.player_dir = 1;
+          this.setPlayerDir(1);
         }
       } else {
         if (dy < 0) {
           this.target_pos = [ix, floor(pos[1] - 0.5)];
-          player_animation.setState('idle_up');
-          this.player_dir = 2;
+          this.setPlayerDir(2);
         } else {
           this.target_pos = [ix, floor(pos[1] + 0.5)];
-          player_animation.setState('idle_down');
-          this.player_dir = 3;
+          this.setPlayerDir(3);
         }
       }
     } else {
       this.target_pos = null;
+      this.run_time = 0;
     }
 
-    dx *= 0.005;
-    dy *= 0.005;
+    dx *= speed;
+    dy *= speed;
     let x2 = pos[0] + dx;
     let y2 = pos[1] + dy;
     const PLAYER_R = 0.25;
