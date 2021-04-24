@@ -3,7 +3,6 @@ Untitled - LD48 - Deeper and deeper
 
 Ludum Dare 45 Entry by Jimbly
 
-gem clustering
 game over detection
 obstacles
 accelerate if running long distances
@@ -12,6 +11,7 @@ drill skips over empty spaces in the first 5, to match the displaced dig chart?
 particles upon shovel; drill; drill expire
 tutorial
 sounds / music
+when going down - fade to black, increment tools, increment level, fade back from black
 
 Roguelike miner - Dwarven Scout/Surveyor?
 * Goal: extract as much ore from a level as possible while scouting the next level and choosing a place to dig

@@ -26,6 +26,7 @@
     "micromatch": "^4.0.2",
     "minimist": "^1.2.5",
     "mkdirp": "^0.5.1",
+    "open-simplex-noise": "^2.5.0",
     "pngjs": "^6.0.0",
     "request": "^2.88.0",
     "winston": "^3.2.1",
