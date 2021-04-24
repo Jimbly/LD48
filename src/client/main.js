@@ -45,7 +45,8 @@ const TILE_GEM_UI = 6;
 const TILE_CRACKED = 8;
 const TILE_SHOVEL = 9;
 
-const DIG_LEN = 5;
+const DRILL_TIME = 400;
+// const DIG_LEN = 5;
 
 const BOARD_W = 48;
 const BOARD_H = 32;
@@ -329,6 +330,7 @@ class Level {
     if (!this.visible[y][x]) {
       if (this.map[y][x] === TILE_GEM) {
         if (this.particles) {
+          ui.playUISound('gem_found');
           engine.glov_particles.createSystem(particle_data.defs.gem_found,
             [(x + 0.5) * TILE_W, (y + 0.5) * TILE_W, Z.PARTICLES]
           );
@@ -430,7 +432,7 @@ class GameState {
       this.cur_level.draw(Z.LEVEL, color_white, this.next_level);
       let ax = this.active_pos[0];
       let ay = this.active_pos[1];
-      if (ax > 0 && ay > 0 && ax < BOARD_W - 1 && ay < BOARD_H - 1) {
+      if (ax > 0 && ay > 0 && ax < BOARD_W - 1 && ay < BOARD_H - 1 && !this.active_drill) {
         let tile = this.cur_level.get(ax, ay);
         if (this.shovels && tile === TILE_OPEN) {
           sprite_tiles.draw({
@@ -451,6 +453,15 @@ class GameState {
           dig_action = 'tunnel';
         }
       }
+      if (this.active_drill) {
+        sprite_active.draw({
+          x: (this.active_drill.pos[0] + 0.5) * TILE_W,
+          y: (this.active_drill.pos[1] + 0.5) * TILE_W,
+          z: Z.PLAYER - 1,
+          frame: anim_drill.getFrame(engine.frame_dt),
+          rot: dir_to_rot[this.active_drill.dir],
+        });
+      }
     }
     sprite_dwarf.draw({
       x: posx,
@@ -460,7 +471,7 @@ class GameState {
       frame: player_animation.getFrame(engine.frame_dt),
     });
     if (!debug_zoom) {
-      if (!this.shovels) {
+      if (!this.shovels && !this.active_drill) {
         font.drawSizedAligned(style_overlay, posx, posy - TILE_W/2 - ui.font_height, Z.UI, ui.font_height,
           font.ALIGN.HCENTER, 0, 0, 'Out of shovels!');
       }
@@ -470,14 +481,15 @@ class GameState {
     camera2d.setAspectFixed(game_width, game_height);
     let ix = floor(this.pos[0]);
     let iy = floor(this.pos[1]);
-    if (dig_action) {
+    if (dig_action && !this.active_drill) {
       if (ui.button({
-        text: `[space] Dig ${dig_action}`,
+        text: `[space] ${dig_action === 'hole' ? 'Dig hole' : 'Drill tunnel'}`,
         x: game_width - ui.button_width,
         y: game_height - ui.button_height,
       }) || input.keyDownEdge(KEYS.SPACE)) {
         --this.shovels;
         if (dig_action === 'hole') {
+          ui.playUISound('shovel');
           for (let ii = 0; ii < DIG_DX.length; ++ii) {
             let yy = this.active_pos[1] + DIG_DY[ii];
             let xx = this.active_pos[0] + DIG_DX[ii];
@@ -490,24 +502,30 @@ class GameState {
           }
         } else {
           assert(ix !== this.active_pos[0] || iy !== this.active_pos[1]);
-          let dx = DX[this.player_dir];
-          let dy = DY[this.player_dir];
-          for (let ii = 0; ii < DIG_LEN; ++ii) {
-            let yy = this.active_pos[1] + dy * ii;
-            let xx = this.active_pos[0] + dx * ii;
-            if (xx <= 0 || yy <= 0 || xx >= BOARD_W - 1 || yy >= BOARD_H - 1) {
-              break;
-            }
-            if (this.cur_level.map[yy][xx] === TILE_SOLID || this.cur_level.map[yy][xx] === TILE_CRACKED) {
-              this.cur_level.map[yy][xx] = TILE_OPEN;
-              // this.cur_level.setVisibleFill(xx, yy);
-            } else {
-              break;
-            }
-          }
+          this.active_drill = {
+            pos: this.active_pos.slice(0),
+            dir: this.player_dir,
+            count: 0,
+            countdown: 0,
+          };
+          // let dx = DX[this.player_dir];
+          // let dy = DY[this.player_dir];
+          // for (let ii = 0; ii < DIG_LEN; ++ii) {
+          //   let yy = this.active_pos[1] + dy * ii;
+          //   let xx = this.active_pos[0] + dx * ii;
+          //   if (xx <= 0 || yy <= 0 || xx >= BOARD_W - 1 || yy >= BOARD_H - 1) {
+          //     break;
+          //   }
+          //   if (this.cur_level.map[yy][xx] === TILE_SOLID || this.cur_level.map[yy][xx] === TILE_CRACKED) {
+          //     this.cur_level.map[yy][xx] = TILE_OPEN;
+          //     // this.cur_level.setVisibleFill(xx, yy);
+          //   } else {
+          //     break;
+          //   }
+          // }
         }
       }
-    } else if (!this.shovels) {
+    } else if (!this.shovels && !this.active_drill) {
       let cur_tile = this.cur_level.map[iy][ix];
       let next_tile = this.next_level.map[iy][ix];
       if (cur_tile === TILE_BRIDGE && canWalkThrough(next_tile)) {
@@ -522,6 +540,7 @@ class GameState {
           this.cur_level.activateParticles();
           this.next_level = new Level(mashString(`${random()}`));
           this.shovels = 10;
+          ui.playUISound('descend');
         }
       } else if (cur_tile === TILE_BRIDGE) {
         font.drawSizedAligned(style_overlay, game_width - 4, game_height - ui.font_height - 4, Z.UI,
@@ -530,7 +549,7 @@ class GameState {
         font.drawSizedAligned(style_overlay, game_width - 4, game_height - ui.font_height - 4, Z.UI,
           ui.font_height, font.ALIGN.HRIGHT, 0, 0, 'Out of shovels! Find a clear hole to jump down.');
       }
-    } else {
+    } else if (!this.active_drill) {
       let cur_tile = this.cur_level.map[iy][ix];
       let next_tile = this.next_level.map[iy][ix];
       if (cur_tile === TILE_GEM) {
@@ -548,7 +567,40 @@ class GameState {
     }
   }
 
+  updateDrill() {
+    let { active_drill } = this;
+    active_drill.countdown -= engine.frame_dt;
+    if (active_drill.countdown > 0) {
+      return;
+    }
+    active_drill.count++;
+    active_drill.countdown += max(DRILL_TIME - active_drill.count*10, 16);
+    let { dir, pos } = active_drill;
+    let [xx, yy] = pos;
+    this.cur_level.map[yy][xx] = TILE_OPEN;
+    pos[0] += DX[dir];
+    pos[1] += DY[dir];
+    xx = pos[0];
+    yy = pos[1];
+    if (xx <= 0 || yy <= 0 || xx >= BOARD_W - 1 || yy >= BOARD_H - 1) {
+      this.active_drill = null;
+      ui.playUISound('drill_stop');
+      return;
+    }
+    if (this.cur_level.map[yy][xx] === TILE_SOLID || this.cur_level.map[yy][xx] === TILE_CRACKED) {
+      // this.cur_level.setVisibleFill(xx, yy);
+    } else {
+      this.active_drill = null;
+      ui.playUISound('drill_stop');
+      return;
+    }
+    ui.playUISound('drill_block');
+  }
+
   update() {
+    if (this.active_drill) {
+      this.updateDrill();
+    }
     let dx = 0;
     dx -= input.keyDown(KEYS.LEFT) + input.keyDown(KEYS.A) + input.padButtonDown(PAD.LEFT);
     dx += input.keyDown(KEYS.RIGHT) + input.keyDown(KEYS.D) + input.padButtonDown(PAD.RIGHT);
@@ -670,6 +722,14 @@ export function main() {
     font = { info: font_info_palanquin32, texture: 'font/palanquin32' };
   }
 
+  let ui_sounds = {
+    gem_found: 'button_click',
+    drill_block: 'button_click',
+    drill_stop: 'button_click',
+    shovel: 'button_click',
+    descend: 'button_click',
+  };
+
   if (!engine.startup({
     game_width,
     game_height,
@@ -677,6 +737,7 @@ export function main() {
     font,
     viewport_postprocess: false,
     antialias: false,
+    ui_sounds,
   })) {
     return;
   }
