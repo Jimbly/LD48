@@ -102,6 +102,9 @@ function canSeeThroughToBelow(tile) {
 function isSolid(tile) {
   return tile === TILE_SOLID || tile === TILE_CRACKED;
 }
+function isDrillable(tile) {
+  return isSolid(tile);
+}
 function canSeeThrough(tile) {
   return !isSolid(tile);
 }
@@ -394,6 +397,12 @@ class Level {
 
 const dir_to_rot = [PI/2, 3*PI/2, PI, 0];
 
+function highlightTile(xx, yy, color) {
+  let w = 1;
+  ui.drawHollowRect(xx * TILE_W + w/2, yy * TILE_W + w/2, (xx+1)*TILE_W - w/2, (yy+1)*TILE_W - w/2, Z.PLAYER - 1,
+    w, 1, color);
+}
+
 class GameState {
   constructor() {
     this.gems_found = 0;
@@ -441,8 +450,18 @@ class GameState {
             z: Z.PLAYER - 1,
             frame: TILE_SHOVEL,
           });
+          for (let ii = 0; ii < DIG_DX.length; ++ii) {
+            let yy = ay + DIG_DY[ii];
+            let xx = ax + DIG_DX[ii];
+            if (xx <= 0 || yy <= 0 || xx >= BOARD_W - 1 || yy >= BOARD_H - 1) {
+              continue;
+            }
+            if (this.cur_level.map[yy][xx] === TILE_OPEN) {
+              highlightTile(xx, yy, [1,0.5,0,1]);
+            }
+          }
           dig_action = 'hole';
-        } else if (this.shovels && (tile === TILE_SOLID || tile === TILE_CRACKED)) {
+        } else if (this.shovels && isDrillable(tile)) {
           sprite_active.draw({
             x: (ax + 0.5) * TILE_W,
             y: (ay + 0.5) * TILE_W,
@@ -450,7 +469,22 @@ class GameState {
             frame: anim_drill.getFrame(engine.frame_dt),
             rot: dir_to_rot[this.player_dir],
           });
-          dig_action = 'tunnel';
+          let dx = DX[this.player_dir];
+          let dy = DY[this.player_dir];
+          for (let ii = 0; ii < 5; ++ii) {
+            let yy = ay + dy * ii;
+            let xx = ax + dx * ii;
+            if (xx <= 0 || yy <= 0 || xx >= BOARD_W - 1 || yy >= BOARD_H - 1) {
+              break;
+            }
+            if (!this.cur_level.visible[yy][xx] || isDrillable(this.cur_level.map[yy][xx])) {
+              let a = 1 - ii/5;
+              highlightTile(xx, yy, [a,0.5*a,0,1]);
+            } else {
+              break;
+            }
+          }
+          dig_action = 'drill';
         }
       }
       if (this.active_drill) {
@@ -470,23 +504,56 @@ class GameState {
       color: show_lower ? color_player_lower : color_white,
       frame: player_animation.getFrame(engine.frame_dt),
     });
+
+    let ix = floor(this.pos[0]);
+    let iy = floor(this.pos[1]);
+    let message;
+    let message_style = style_overlay;
+    if (!dig_action) {
+      let cur_tile = this.cur_level.map[iy][ix];
+      let next_tile = this.next_level.map[iy][ix];
+      if (!this.shovels) {
+        if (cur_tile === TILE_BRIDGE && canWalkThrough(next_tile)) {
+          dig_action = 'descend';
+          highlightTile(ix, iy, [0,1,0,1]);
+        } else if (cur_tile === TILE_BRIDGE) {
+          message = 'You can\'t jump down here.';
+        } else {
+          message = 'Out of shovels! Find a clear hole to jump down.';
+        }
+      } else if (cur_tile === TILE_GEM) {
+        message = 'This is a Gem, it will be collected when you leave the level.';
+        message_style = style_hint;
+      } else if (cur_tile === TILE_BRIDGE) {
+        if (canWalkThrough(next_tile)) {
+          message = 'This is a hole, jump down it when you are out of shovels.';
+          message_style = style_hint;
+        } else {
+          message = 'This is a hole, but it is unsafe underneath.';
+          message_style = style_hint;
+        }
+      }
+    }
+    if (this.active_drill) {
+      dig_action = null;
+      message = null;
+    }
+
     if (!debug_zoom) {
       if (!this.shovels && !this.active_drill) {
         font.drawSizedAligned(style_overlay, posx, posy - TILE_W/2 - ui.font_height, Z.UI, ui.font_height,
-          font.ALIGN.HCENTER, 0, 0, 'Out of shovels!');
+          font.ALIGN.HCENTER, 0, 0, dig_action === 'descend' ? 'Go down here?' : 'Out of shovels!');
       }
       camera2d.zoom(posx, posy, 0.95);
     }
     this.next_level.draw(Z.LEVEL - 2, show_lower ? color_white : color_next_level);
     camera2d.setAspectFixed(game_width, game_height);
-    let ix = floor(this.pos[0]);
-    let iy = floor(this.pos[1]);
-    if (dig_action && !this.active_drill) {
+    if (dig_action === 'hole' || dig_action === 'drill') {
       if (ui.button({
         text: `[space] ${dig_action === 'hole' ? 'Dig hole' : 'Drill tunnel'}`,
         x: game_width - ui.button_width,
         y: game_height - ui.button_height,
-      }) || input.keyDownEdge(KEYS.SPACE)) {
+      }) || input.keyDownEdge(KEYS.SPACE) || input.keyDownEdge(KEYS.E)) {
         --this.shovels;
         if (dig_action === 'hole') {
           ui.playUISound('shovel');
@@ -525,45 +592,23 @@ class GameState {
           // }
         }
       }
-    } else if (!this.shovels && !this.active_drill) {
-      let cur_tile = this.cur_level.map[iy][ix];
-      let next_tile = this.next_level.map[iy][ix];
-      if (cur_tile === TILE_BRIDGE && canWalkThrough(next_tile)) {
-        if (ui.button({
-          text: '[space] Descend',
-          x: game_width - ui.button_width,
-          y: game_height - ui.button_height,
-        }) || input.keyDownEdge(KEYS.SPACE)) {
-          this.gems_found += this.cur_level.gems_found;
-          this.gems_total += this.cur_level.gems_total;
-          this.cur_level = this.next_level;
-          this.cur_level.activateParticles();
-          this.next_level = new Level(mashString(`${random()}`));
-          this.shovels = 10;
-          ui.playUISound('descend');
-        }
-      } else if (cur_tile === TILE_BRIDGE) {
-        font.drawSizedAligned(style_overlay, game_width - 4, game_height - ui.font_height - 4, Z.UI,
-          ui.font_height, font.ALIGN.HRIGHT, 0, 0, 'You can\'t jump down here.');
-      } else {
-        font.drawSizedAligned(style_overlay, game_width - 4, game_height - ui.font_height - 4, Z.UI,
-          ui.font_height, font.ALIGN.HRIGHT, 0, 0, 'Out of shovels! Find a clear hole to jump down.');
+    } else if (dig_action === 'descend') {
+      if (ui.button({
+        text: '[space] Descend',
+        x: game_width - ui.button_width,
+        y: game_height - ui.button_height,
+      }) || input.keyDownEdge(KEYS.SPACE) || input.keyDownEdge(KEYS.E)) {
+        this.gems_found += this.cur_level.gems_found;
+        this.gems_total += this.cur_level.gems_total;
+        this.cur_level = this.next_level;
+        this.cur_level.activateParticles();
+        this.next_level = new Level(mashString(`${random()}`));
+        this.shovels = 10;
+        ui.playUISound('descend');
       }
-    } else if (!this.active_drill) {
-      let cur_tile = this.cur_level.map[iy][ix];
-      let next_tile = this.next_level.map[iy][ix];
-      if (cur_tile === TILE_GEM) {
-        font.drawSizedAligned(style_hint, game_width - 4, game_height - ui.font_height - 4, Z.UI,
-          ui.font_height, font.ALIGN.HRIGHT, 0, 0, 'This is a Gem, it will be collected when you leave the level.');
-      } else if (cur_tile === TILE_BRIDGE) {
-        if (canWalkThrough(next_tile)) {
-          font.drawSizedAligned(style_hint, game_width - 4, game_height - ui.font_height - 4, Z.UI,
-            ui.font_height, font.ALIGN.HRIGHT, 0, 0, 'This is a hole, jump down it when you are out of shovels.');
-        } else {
-          font.drawSizedAligned(style_hint, game_width - 4, game_height - ui.font_height - 4, Z.UI,
-            ui.font_height, font.ALIGN.HRIGHT, 0, 0, 'This is a hole, but it is unsafe underneath.');
-        }
-      }
+    } else if (message) {
+      font.drawSizedAligned(message_style, game_width - 4, game_height - ui.font_height - 4, Z.UI,
+        ui.font_height, font.ALIGN.HRIGHT, 0, 0, message);
     }
   }
 
@@ -738,6 +783,7 @@ export function main() {
     viewport_postprocess: false,
     antialias: false,
     ui_sounds,
+    line_mode: ui.LINE_CAP_SQUARE,
   })) {
     return;
   }
