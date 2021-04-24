@@ -311,7 +311,7 @@ GlovFont.prototype.drawSizedAligned = function (style, _x, _y, z, size, align, w
     case ALIGN.HCENTER:
       x = _x + (w - width) / 2;
       if (this.font_info.noFilter) {
-        x |= 0; // ensure integral
+        // x |= 0; // ensure integral // donotcheckin
       }
       break;
     case ALIGN.HRIGHT:

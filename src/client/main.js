@@ -6,15 +6,17 @@ const assert = require('assert');
 const camera2d = require('./glov/camera2d.js');
 const engine = require('./glov/engine.js');
 const glov_font = require('./glov/font.js');
-const { abs, floor, random } = Math;
+const { abs, cos, floor, max, min, random, sin, PI } = Math;
 const input = require('./glov/input.js');
 const { KEYS, PAD } = input;
 const net = require('./glov/net.js');
 const ui = require('./glov/ui.js');
+const particles = require('./glov/particles.js');
+const particle_data = require('./particle_data.js');
 const { mashString, randCreate } = require('./glov/rand_alea.js');
 const sprites = require('./glov/sprites.js');
 const { clamp } = require('../common/util.js');
-const { vec2, v2floor, v2set, vec4, v4set } = require('./glov/vmath.js');
+const { vec2, v2floor, v2set, v3lerp, vec4, v4set } = require('./glov/vmath.js');
 
 window.Z = window.Z || {};
 Z.BACKGROUND = 1;
@@ -30,12 +32,12 @@ const game_height = 256;
 
 const TILE_SOLID = 0;
 const TILE_GEM = 1;
-const TILE_LAVA = 2;
+// const TILE_LAVA = 2;
 const TILE_OPEN = 3;
-const TILE_BRIDGE = 4;
+const TILE_BRIDGE = 10;
 const TILE_PIT = 5;
 const TILE_GEM_UI = 6;
-const TILE_INVISIBLE = 7;
+// const TILE_INVISIBLE = 7;
 const TILE_CRACKED = 8;
 const TILE_SHOVEL = 9;
 
@@ -49,8 +51,9 @@ const BOARD_H_PX = BOARD_H * TILE_W;
 const color_black = vec4(0,0,0,1);
 const color_white = vec4(1,1,1,1);
 const color_next_level = vec4(0.5,0.5,0.5,1);
+const color_unlit = vec4(0.4,0.4,0.6,1);
 const color_player_lower = vec4(1, 1, 1, 0.25);
-const color_debug_visible = vec4(0.8,0.5,0.8,1);
+const color_debug_visible = vec4(0.3,0.1,0.3,1);
 
 let sprite_active;
 let sprite_solid;
@@ -93,14 +96,14 @@ function isSolid(tile) {
   return tile === TILE_SOLID || tile === TILE_CRACKED;
 }
 function canSeeThrough(tile) {
-  return !isSolid(tile)
+  return !isSolid(tile);
 }
 function canWalkThrough(tile) {
   return tile === TILE_BRIDGE || tile === TILE_OPEN || tile === TILE_GEM;
 }
 
-let debug_zoom = engine.DEBUG;
-let debug_visible = engine.DEBUG;
+let debug_zoom = false;
+let debug_visible = false;
 let debug_freecam = false;
 
 const style_overlay = glov_font.style(null, {
@@ -113,18 +116,79 @@ const style_hint = glov_font.style(style_overlay, {
 });
 let font;
 
+let raycast = (function () {
+  let walk = new Int32Array(2);
+  let step = new Int32Array(2);
+  let t_max = vec2();
+  let t_delta = vec2();
+  return function raycastFn(level, startpos, dir, max_len, dvis) {
+    let { map, lit, visible } = level;
+    v2floor(walk, startpos);
+    // init
+    for (let ii = 0; ii < 2; ++ii) {
+      if (!dir[ii]) {
+        step[ii] = 0;
+        t_max[ii] = max_len + 1;
+      } else {
+        if (dir[ii] < 0) {
+          step[ii] = -1;
+          t_max[ii] = (walk[ii] - startpos[ii]) / dir[ii];
+          t_delta[ii] = -1 / dir[ii];
+        } else {
+          t_max[ii] = (walk[ii] + 1 - startpos[ii]) / dir[ii];
+          step[ii] = 1;
+          t_delta[ii] = 1 / dir[ii];
+        }
+      }
+    }
+
+    lit[walk[1]][walk[0]] = min(1, lit[walk[1]][walk[0]] + dvis);
+    level.setCellVisible(walk[0], walk[1]);
+    // walk
+    let ret = 0;
+    // let backidx = 0;
+    // let last_t = 0;
+    do {
+      let minidx = (t_max[0] < t_max[1]) ? 0 : 1;
+      if (t_max[minidx] > max_len) {
+        break;
+      }
+      // backidx = minidx;
+      // last_t = t_max[minidx];
+      walk[minidx] += step[minidx];
+      t_max[minidx] += t_delta[minidx];
+      let cur_lit = lit[walk[1]][walk[0]] = min(1, lit[walk[1]][walk[0]] + dvis);
+      if (cur_lit > 0.1 && !visible[walk[1]][walk[0]]) {
+        level.setCellVisible(walk[0], walk[1]);
+      }
+      ret = !canSeeThrough(map[walk[1]][walk[0]]);
+      dvis *= 0.9;
+    } while (!ret);
+    // v2copy(out_prevpos, walk);
+    // out_prevpos[backidx] -= step[backidx];
+    // v2copy(out_pos, walk);
+    return ret;
+  };
+}());
+
+let temp_color = vec4(0,0,0,1);
+
 class Level {
   constructor(seed) {
     this.w = BOARD_W;
     this.h = BOARD_H;
+    this.particles = false;
     let map = this.map = [];
     this.visible = [];
+    this.lit = [];
     for (let ii = 0; ii < this.h; ++ii) {
       map[ii] = [];
       this.visible[ii] = [];
+      this.lit[ii] = [];
       for (let jj = 0; jj < this.w; ++jj) {
         map[ii].push(TILE_SOLID);
         this.visible[ii].push(false);
+        this.lit[ii].push(0);
       }
     }
     let rand = randCreate(seed);
@@ -196,18 +260,21 @@ class Level {
     for (let yy = 0; yy < this.h; ++yy) {
       let row = this.map[yy];
       let vrow = this.visible[yy];
+      let lrow = this.lit[yy];
       for (let xx = 0; xx < this.w; ++xx) {
         if (vrow[xx] || debug_visible) {
           let tile = row[xx];
           if ((!debug_visible || vrow[xx]) && next_level && canSeeThroughToBelow(tile)) {
             next_level.setVisibleFromAbove(xx, yy);
           }
-          if (vrow[xx] && next_level && canSeeThrough(tile)) {
-            this.setVisible(xx, yy);
-          }
+          // if (vrow[xx] && next_level && canSeeThrough(tile)) {
+          //   this.setVisibleFill(xx, yy);
+          // }
           let cc = color;
           if (!vrow[xx]) {
             cc = color_debug_visible;
+          } else if (lrow[xx] !== 1) {
+            cc = v3lerp(temp_color, lrow[xx], color_unlit, color);
           }
           let zz = z;
           if (tile === TILE_GEM) {
@@ -239,7 +306,34 @@ class Level {
     }
   }
 
-  setVisible(x, y) {
+  activateParticles() {
+    this.particles = true;
+    for (let yy = 0; yy < BOARD_H; ++yy) {
+      for (let xx = 0; xx < BOARD_W; ++xx) {
+        if (this.map[yy][xx] === TILE_GEM && this.visible[yy][xx]) {
+          engine.glov_particles.createSystem(particle_data.defs.gem_found,
+            [(xx + 0.5) * TILE_W, (yy + 0.5) * TILE_W, Z.PARTICLES]
+          );
+        }
+      }
+    }
+  }
+
+  setCellVisible(x, y) {
+    if (!this.visible[y][x]) {
+      if (this.map[y][x] === TILE_GEM) {
+        if (this.particles) {
+          engine.glov_particles.createSystem(particle_data.defs.gem_found,
+            [(x + 0.5) * TILE_W, (y + 0.5) * TILE_W, Z.PARTICLES]
+          );
+        }
+        this.gems_found++;
+      }
+      this.visible[y][x] = true;
+    }
+  }
+
+  setVisibleFill(x, y) {
     let todo = [];
     todo.push(x,y);
     while (todo.length) {
@@ -248,12 +342,7 @@ class Level {
       // if (this.visible[y][x]) {
       //   continue;
       // }
-      if (!this.visible[y][x]) {
-        if (this.map[y][x] === TILE_GEM) {
-          this.gems_found++;
-        }
-        this.visible[y][x] = true;
-      }
+      this.setCellVisible(x, y);
       if (this.isSolid(x, y)) {
         continue;
       }
@@ -267,15 +356,30 @@ class Level {
     }
   }
   setVisibleFromAbove(x, y) {
+    this.lit[y][x] = true;
     for (let ii = 0; ii < DX_ABOVE.length; ++ii) {
       let xx = x + DX_ABOVE[ii];
       let yy = y + DY_ABOVE[ii];
-      if (!this.visible[yy][xx]) {
-        if (this.map[yy][xx] === TILE_GEM) {
-          this.gems_found++;
-        }
-        this.visible[yy][xx] = true;
+      this.setCellVisible(xx, yy);
+    }
+  }
+
+  tickVisibility(x0, y0) {
+    let { lit } = this;
+    let dvis = engine.frame_dt * 0.001;
+    for (let yy = 0; yy < BOARD_H; ++yy) {
+      let row = lit[yy];
+      for (let xx = 0; xx < BOARD_W; ++xx) {
+        row[xx] = max(0, row[xx] - dvis);
       }
+    }
+    let steps = 40;
+    let tstep = PI * 2 / steps;
+    let theta_mod = random() * tstep;
+    for (let theta = theta_mod; theta < PI * 2; theta += tstep) {
+      let ctheta = cos(theta);
+      let stheta = sin(theta);
+      raycast(this, [x0, y0], [ctheta, stheta], 100, dvis * 4);
     }
   }
 }
@@ -284,14 +388,15 @@ class GameState {
   constructor() {
     this.gems_found = 0;
     this.gems_total = 0;
-    this.cur_level = new Level(mashString(`1.${random()}`));
-    this.next_level = new Level(mashString(`2.${random()}`));
-    this.pos = this.cur_level.spawn_pos;
+    this.cur_level = new Level(mashString('1')); // `1.${random()}`));
+    this.cur_level.activateParticles();
+    this.next_level = new Level(mashString('2')); // `2.${random()}`));
+    this.pos = this.cur_level.spawn_pos.slice(0);
     this.active_pos = v2floor(vec2(), this.pos);
-    this.shovels = 10;
+    this.shovels = 3;
   }
 
-  draw() {
+  setMainCamera() {
     camera2d.setAspectFixed(game_width, game_height);
     let posx = this.pos[0] * TILE_W;
     let posy = this.pos[1] * TILE_W;
@@ -302,6 +407,13 @@ class GameState {
     if (debug_zoom) {
       camera2d.setAspectFixed(BOARD_W_PX, BOARD_H_PX);
     }
+  }
+
+  draw() {
+    this.setMainCamera();
+    let posx = this.pos[0] * TILE_W;
+    let posy = this.pos[1] * TILE_W;
+    this.cur_level.tickVisibility(this.pos[0], this.pos[1]);
     let show_lower = input.keyDown(KEYS.SHIFT);
     let dig_action;
     if (!show_lower) {
@@ -326,7 +438,13 @@ class GameState {
       z: Z.PLAYER,
       color: show_lower ? color_player_lower : color_white,
     });
-    camera2d.zoom(posx, posy, 0.95);
+    if (!debug_zoom) {
+      if (!this.shovels) {
+        font.drawSizedAligned(style_overlay, posx, posy - TILE_W/2 - ui.font_height, Z.UI, ui.font_height,
+          font.ALIGN.HCENTER, 0, 0, 'Out of shovels!');
+      }
+      camera2d.zoom(posx, posy, 0.95);
+    }
     this.next_level.draw(Z.LEVEL - 2, show_lower ? color_white : color_next_level);
     camera2d.setAspectFixed(game_width, game_height);
     let ix = floor(this.pos[0]);
@@ -361,7 +479,7 @@ class GameState {
             }
             if (this.cur_level.map[yy][xx] === TILE_SOLID || this.cur_level.map[yy][xx] === TILE_CRACKED) {
               this.cur_level.map[yy][xx] = TILE_OPEN;
-              this.cur_level.setVisible(xx, yy);
+              // this.cur_level.setVisibleFill(xx, yy);
             } else {
               break;
             }
@@ -380,6 +498,7 @@ class GameState {
           this.gems_found += this.cur_level.gems_found;
           this.gems_total += this.cur_level.gems_total;
           this.cur_level = this.next_level;
+          this.cur_level.activateParticles();
           this.next_level = new Level(mashString(`${random()}`));
           this.shovels = 10;
         }
@@ -395,7 +514,7 @@ class GameState {
       let next_tile = this.next_level.map[iy][ix];
       if (cur_tile === TILE_GEM) {
         font.drawSizedAligned(style_hint, game_width - 4, game_height - ui.font_height - 4, Z.UI,
-          ui.font_height, font.ALIGN.HRIGHT, 0, 0, 'This is a Gem, it will be scored when you leave the level.');
+          ui.font_height, font.ALIGN.HRIGHT, 0, 0, 'This is a Gem, it will be collected when you leave the level.');
       } else if (cur_tile === TILE_BRIDGE) {
         if (canWalkThrough(next_tile)) {
           font.drawSizedAligned(style_hint, game_width - 4, game_height - ui.font_height - 4, Z.UI,
@@ -442,8 +561,6 @@ class GameState {
       }
     }
 
-    cur_level.setVisible(ix, iy);
-
     pos[0] = x2;
     pos[1] = y2;
   }
@@ -483,6 +600,7 @@ export function main() {
   ui.scaleSizes(13 / 32);
   ui.setFontHeight(8);
 
+  particles.preloadParticleData(particle_data);
   sprite_tiles = sprites.create({
     name: 'tiles',
     size: vec2(TILE_W, TILE_W),
@@ -529,7 +647,7 @@ export function main() {
       });
       font.drawSizedAligned(style_overlay, game_width - 4 - icon_size, y, Z.UI, ui.font_height * 2,
         font.ALIGN.HRIGHT, 0, 0,
-        `${state.gems_found}`);
+        `${state.gems_found + state.cur_level.gems_found}`);
       y += icon_size + 4;
     }
     sprite_tiles_ui.draw({
@@ -568,6 +686,10 @@ export function main() {
     }
     state.update();
     state.draw();
+    if (engine.DEBUG && input.keyDownEdge(KEYS.F3)) {
+      state.cur_level.activateParticles();
+    }
+    state.setMainCamera(); // for particles
   }
 
   function playInit(dt) {
