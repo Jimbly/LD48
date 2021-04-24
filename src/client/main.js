@@ -26,7 +26,7 @@ window.Z = window.Z || {};
 Z.BACKGROUND = 1;
 Z.SPRITES = 10;
 Z.LEVEL = 10;
-Z.PLAYER = 12;
+Z.PLAYER = 15;
 Z.PARTICLES = 20;
 Z.UI_TEST = 200;
 
@@ -47,6 +47,7 @@ const TILE_SHOVEL = 9;
 
 const DRILL_TIME = 400;
 // const DIG_LEN = 5;
+const DRILL_TRIGGER_TIME = 400;
 
 const BOARD_W = 48;
 const BOARD_H = 32;
@@ -62,6 +63,7 @@ const color_debug_visible = vec4(0.3,0.1,0.3,1);
 
 let sprite_drill;
 let sprite_drill_ui;
+let sprite_timer;
 let sprite_solid;
 let sprite_tiles;
 let sprite_tiles_ui;
@@ -433,6 +435,7 @@ class GameState {
   }
 
   draw() {
+    let drill_trigger = null;
     this.setMainCamera();
     let posx = this.pos[0] * TILE_W;
     let posy = this.pos[1] * TILE_W;
@@ -486,6 +489,7 @@ class GameState {
               break;
             }
           }
+          drill_trigger = { x: ax, y: ay };
           dig_action = 'drill';
         }
       }
@@ -506,6 +510,30 @@ class GameState {
       color: show_lower ? color_player_lower : color_white,
       frame: player_animation.getFrame(engine.frame_dt),
     });
+
+    let do_drill = false;
+    if (drill_trigger && this.target_pos &&
+      drill_trigger.x === this.target_pos[0] && drill_trigger.y === this.target_pos[1]
+    ) {
+      if (this.drill_trigger) {
+        this.drill_trigger.counter += engine.frame_dt;
+      } else {
+        this.drill_trigger = drill_trigger;
+        this.drill_trigger.counter = 0;
+      }
+      sprite_timer.draw({
+        x: drill_trigger.x * TILE_W,
+        y: drill_trigger.y * TILE_W,
+        z: Z.PLAYER,
+        frame: min(floor(this.drill_trigger.counter / DRILL_TRIGGER_TIME * 9), 8),
+        color: [1,1,1,0.8],
+      });
+      if (this.drill_trigger.counter > DRILL_TRIGGER_TIME) {
+        do_drill = true;
+      }
+    } else {
+      this.drill_trigger = null;
+    }
 
     let ix = floor(this.pos[0]);
     let iy = floor(this.pos[1]);
@@ -555,7 +583,7 @@ class GameState {
         text: `[space] ${dig_action === 'hole' ? 'Dig hole' : 'Drill tunnel'}`,
         x: game_width - ui.button_width,
         y: game_height - ui.button_height,
-      }) || input.keyDownEdge(KEYS.SPACE) || input.keyDownEdge(KEYS.E)) {
+      }) || input.keyDownEdge(KEYS.SPACE) || input.keyDownEdge(KEYS.E) || do_drill) {
         if (dig_action === 'hole') {
           --this.shovels;
           ui.playUISound('shovel');
@@ -615,6 +643,7 @@ class GameState {
       font.drawSizedAligned(message_style, game_width - 4, game_height - ui.font_height - 4, Z.UI,
         ui.font_height, font.ALIGN.HRIGHT, 0, 0, message);
     }
+
   }
 
   updateDrill() {
@@ -657,31 +686,37 @@ class GameState {
     let dy = 0;
     dy -= input.keyDown(KEYS.UP) + input.keyDown(KEYS.W) + input.padButtonDown(PAD.UP);
     dy += input.keyDown(KEYS.DOWN) + input.keyDown(KEYS.S) + input.padButtonDown(PAD.DOWN);
+    let { pos, cur_level } = this;
+    let ix = floor(pos[0]);
+    let iy = floor(pos[1]);
     if (abs(dx) + abs(dy)) {
       if (abs(dx) > abs(dy)) {
         if (dx < 0) {
+          this.target_pos = [floor(pos[0] - 0.5), iy];
           player_animation.setState('idle_left');
           this.player_dir = 0;
         } else {
+          this.target_pos = [floor(pos[0] + 0.5), iy];
           player_animation.setState('idle_right');
           this.player_dir = 1;
         }
       } else {
         if (dy < 0) {
+          this.target_pos = [ix, floor(pos[1] - 0.5)];
           player_animation.setState('idle_up');
           this.player_dir = 2;
         } else {
+          this.target_pos = [ix, floor(pos[1] + 0.5)];
           player_animation.setState('idle_down');
           this.player_dir = 3;
         }
       }
+    } else {
+      this.target_pos = null;
     }
 
     dx *= 0.005;
     dy *= 0.005;
-    let { pos, cur_level } = this;
-    let ix = floor(pos[0]);
-    let iy = floor(pos[1]);
     let x2 = pos[0] + dx;
     let y2 = pos[1] + dy;
     const PLAYER_R = 0.25;
@@ -843,14 +878,14 @@ export function main() {
     origin: vec2(0,0),
   });
   sprite_drill = sprites.create({
-    name: 'active',
+    name: 'drill',
     ws: [16,16],
     hs: [16,16],
     size: vec2(TILE_W, TILE_W),
     origin: vec2(0.5, 0.5),
   });
   sprite_drill_ui = sprites.create({
-    name: 'active',
+    name: 'drill',
     ws: [16,16],
     hs: [16,16],
   });
@@ -861,6 +896,13 @@ export function main() {
     },
   });
   anim_drill.setState('drill');
+  sprite_timer = sprites.create({
+    name: 'timer',
+    ws: [16,16,16],
+    hs: [16,16,16],
+    size: vec2(TILE_W, TILE_W),
+    origin: vec2(0, 0),
+  });
 
   let state;
 
