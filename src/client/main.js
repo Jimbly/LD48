@@ -60,7 +60,8 @@ const color_unlit = vec4(0.4,0.4,0.6,1);
 const color_player_lower = vec4(1, 1, 1, 0.25);
 const color_debug_visible = vec4(0.3,0.1,0.3,1);
 
-let sprite_active;
+let sprite_drill;
+let sprite_drill_ui;
 let sprite_solid;
 let sprite_tiles;
 let sprite_tiles_ui;
@@ -415,6 +416,7 @@ class GameState {
     this.player_dir = 3; // down
     this.active_pos = vec2();
     this.shovels = 3;
+    this.drills = 3;
   }
 
   setMainCamera() {
@@ -461,8 +463,8 @@ class GameState {
             }
           }
           dig_action = 'hole';
-        } else if (this.shovels && isDrillable(tile)) {
-          sprite_active.draw({
+        } else if (this.drills && isDrillable(tile)) {
+          sprite_drill.draw({
             x: (ax + 0.5) * TILE_W,
             y: (ay + 0.5) * TILE_W,
             z: Z.PLAYER - 1,
@@ -488,7 +490,7 @@ class GameState {
         }
       }
       if (this.active_drill) {
-        sprite_active.draw({
+        sprite_drill.draw({
           x: (this.active_drill.pos[0] + 0.5) * TILE_W,
           y: (this.active_drill.pos[1] + 0.5) * TILE_W,
           z: Z.PLAYER - 1,
@@ -512,24 +514,24 @@ class GameState {
     if (!dig_action) {
       let cur_tile = this.cur_level.map[iy][ix];
       let next_tile = this.next_level.map[iy][ix];
-      if (!this.shovels) {
+      if (!this.drills && !this.shovels) {
         if (cur_tile === TILE_BRIDGE && canWalkThrough(next_tile)) {
           dig_action = 'descend';
           highlightTile(ix, iy, [0,1,0,1]);
         } else if (cur_tile === TILE_BRIDGE) {
           message = 'You can\'t jump down here.';
         } else {
-          message = 'Out of shovels! Find a clear hole to jump down.';
+          message = 'Out of tools! Find a clear hole to jump down.';
         }
       } else if (cur_tile === TILE_GEM) {
         message = 'This is a Gem, it will be collected when you leave the level.';
         message_style = style_hint;
       } else if (cur_tile === TILE_BRIDGE) {
         if (canWalkThrough(next_tile)) {
-          message = 'This is a hole, jump down it when you are out of shovels.';
+          message = 'This is a hole, jump down it when you are out of tools.';
           message_style = style_hint;
         } else {
-          message = 'This is a hole, but it is unsafe underneath.';
+          message = 'A hole was dug here, but it is not clear below.';
           message_style = style_hint;
         }
       }
@@ -540,9 +542,9 @@ class GameState {
     }
 
     if (!debug_zoom) {
-      if (!this.shovels && !this.active_drill) {
+      if (!this.shovels && !this.drills && !this.active_drill) {
         font.drawSizedAligned(style_overlay, posx, posy - TILE_W/2 - ui.font_height, Z.UI, ui.font_height,
-          font.ALIGN.HCENTER, 0, 0, dig_action === 'descend' ? 'Go down here?' : 'Out of shovels!');
+          font.ALIGN.HCENTER, 0, 0, dig_action === 'descend' ? 'Go down here?' : 'Out of tools!');
       }
       camera2d.zoom(posx, posy, 0.95);
     }
@@ -554,8 +556,8 @@ class GameState {
         x: game_width - ui.button_width,
         y: game_height - ui.button_height,
       }) || input.keyDownEdge(KEYS.SPACE) || input.keyDownEdge(KEYS.E)) {
-        --this.shovels;
         if (dig_action === 'hole') {
+          --this.shovels;
           ui.playUISound('shovel');
           for (let ii = 0; ii < DIG_DX.length; ++ii) {
             let yy = this.active_pos[1] + DIG_DY[ii];
@@ -568,6 +570,8 @@ class GameState {
             }
           }
         } else {
+          assert.equal(dig_action, 'drill');
+          --this.drills;
           assert(ix !== this.active_pos[0] || iy !== this.active_pos[1]);
           this.active_drill = {
             pos: this.active_pos.slice(0),
@@ -603,7 +607,8 @@ class GameState {
         this.cur_level = this.next_level;
         this.cur_level.activateParticles();
         this.next_level = new Level(mashString(`${random()}`));
-        this.shovels = 10;
+        this.shovels = 5;
+        this.drills = 5;
         ui.playUISound('descend');
       }
     } else if (message) {
@@ -837,12 +842,17 @@ export function main() {
     size: vec2(TILE_W, TILE_W),
     origin: vec2(0,0),
   });
-  sprite_active = sprites.create({
+  sprite_drill = sprites.create({
     name: 'active',
     ws: [16,16],
     hs: [16,16],
     size: vec2(TILE_W, TILE_W),
     origin: vec2(0.5, 0.5),
+  });
+  sprite_drill_ui = sprites.create({
+    name: 'active',
+    ws: [16,16],
+    hs: [16,16],
   });
   anim_drill = sprite_animation.create({
     drill: {
@@ -888,6 +898,16 @@ export function main() {
     font.drawSizedAligned(style_overlay, game_width - 4 - icon_size, y, Z.UI, ui.font_height * 2,
       font.ALIGN.HRIGHT, 0, 0,
       `${state.shovels}`);
+    y += icon_size + 4;
+
+    sprite_drill_ui.draw({
+      x: game_width - 4 - icon_size, y: y + icon_size, w: icon_size, h: icon_size, z: Z.UI,
+      frame: 0,
+      rot: 3*PI/2,
+    });
+    font.drawSizedAligned(style_overlay, game_width - 4 - icon_size, y, Z.UI, ui.font_height * 2,
+      font.ALIGN.HRIGHT, 0, 0,
+      `${state.drills}`);
     y += icon_size + 4;
 
     if (engine.DEBUG) {
