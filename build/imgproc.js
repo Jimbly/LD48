@@ -26,8 +26,12 @@ module.exports = function () {
       } catch (e) {
         if (e.toString().indexOf('at end of stream') !== -1) {
           // Chrome stated adding an extra 0?!
+          let extra = 0;
+          while (file.contents[file.contents.length - 1 - extra] === 0) {
+            ++extra;
+          }
           try {
-            pngin = PNG.sync.read(file.contents.slice(0, -1));
+            pngin = PNG.sync.read(file.contents.slice(0, -extra));
           } catch (e2) {
             return void done(e2);
           }
