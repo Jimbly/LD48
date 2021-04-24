@@ -3,11 +3,12 @@ Untitled - LD48 - Deeper and deeper
 
 Ludum Dare 45 Entry by Jimbly
 
-less open space
-more visibility from shovels
+minesweeper deductions on cracked rocks - different cracks for 2/3 adjacent gems
+  generally rocks always show number of adjacent gems this way?
 gem clustering
 game over detection
 obstacles
+accelerate if running long distances
 
 particles upon shovel; drill; drill expire
 tutorial

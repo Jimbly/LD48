@@ -76,11 +76,13 @@ let anim_drill;
 const DX = [-1, 1, 0, 0];
 const DY = [0, 0, -1, 1];
 
-const DX_ABOVE = [-1, 0, 1, -1, 0, 1, -1, 0, 1];
-const DY_ABOVE = [-1, -1, -1, 0, 0, 0, 1, 1, 1];
+const DX_ABOVE = [-1, 0, 1, -1, 0, 1, -1, 0, 1, -2, 2, 0, 0];
+const DY_ABOVE = [-1, -1, -1, 0, 0, 0, 1, 1, 1, 0, 0, -2, 2];
 
 const DIG_DX = [-1, 0, 1, 0, 0];
 const DIG_DY = [0, 0, 0, -1, 1];
+// const DIG_DX = [-1,-1,1,1,-1, 0, 1, 0, 0];
+// const DIG_DY = [-1,1,-1,1,0, 0, 0, -1, 1];
 
 const GEM_DELTA = [
   // adjacent
