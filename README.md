@@ -3,10 +3,9 @@ Untitled - LD48 - Deeper and deeper
 
 Ludum Dare 45 Entry by Jimbly
 
-better dig targetting & infini shovel?
-  add directional player sprite
-  do not allow going right next to wall
+infini drill?
 shovels vs drills
+hole to solid rock to should just look very different - dirt over rock, not a hole at all
 less open space
 more visibility from shovels
 gem clustering

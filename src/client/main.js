@@ -6,7 +6,7 @@ const assert = require('assert');
 const camera2d = require('./glov/camera2d.js');
 const engine = require('./glov/engine.js');
 const glov_font = require('./glov/font.js');
-const { abs, cos, floor, max, min, random, sin, PI } = Math;
+const { abs, cos, floor, max, min, random, sin, sqrt, PI } = Math;
 const input = require('./glov/input.js');
 const { KEYS, PAD } = input;
 const net = require('./glov/net.js');
@@ -15,8 +15,12 @@ const particles = require('./glov/particles.js');
 const particle_data = require('./particle_data.js');
 const { mashString, randCreate } = require('./glov/rand_alea.js');
 const sprites = require('./glov/sprites.js');
+const sprite_animation = require('./glov/sprite_animation.js');
 const { clamp } = require('../common/util.js');
-const { vec2, v2floor, v2set, v3lerp, vec4, v4set } = require('./glov/vmath.js');
+const {
+  vec2, v2add, v2addScale, v2floor, v2lengthSq, v2normalize, v2sub, v2scale, v2set,
+  v3lerp, vec4, v4set,
+} = require('./glov/vmath.js');
 
 window.Z = window.Z || {};
 Z.BACKGROUND = 1;
@@ -60,6 +64,8 @@ let sprite_solid;
 let sprite_tiles;
 let sprite_tiles_ui;
 let sprite_dwarf;
+let player_animation;
+let anim_drill;
 
 const DX = [-1, 1, 0, 0];
 const DY = [0, 0, -1, 1];
@@ -384,6 +390,8 @@ class Level {
   }
 }
 
+const dir_to_rot = [PI/2, 3*PI/2, PI, 0];
+
 class GameState {
   constructor() {
     this.gems_found = 0;
@@ -392,7 +400,9 @@ class GameState {
     this.cur_level.activateParticles();
     this.next_level = new Level(mashString('2')); // `2.${random()}`));
     this.pos = this.cur_level.spawn_pos.slice(0);
-    this.active_pos = v2floor(vec2(), this.pos);
+    player_animation.setState('idle_down');
+    this.player_dir = 3; // down
+    this.active_pos = vec2();
     this.shovels = 3;
   }
 
@@ -420,16 +430,26 @@ class GameState {
       this.cur_level.draw(Z.LEVEL, color_white, this.next_level);
       let ax = this.active_pos[0];
       let ay = this.active_pos[1];
-      let tile = this.cur_level.get(ax, ay);
-      if (this.shovels && (tile === TILE_SOLID || tile === TILE_CRACKED || tile === TILE_OPEN) &&
-        ax > 0 && ay > 0 && ax < BOARD_W - 1 && ay < BOARD_H - 1
-      ) {
-        sprite_active.draw({
-          x: ax * TILE_W,
-          y: ay * TILE_W,
-          z: Z.PLAYER - 1,
-        });
-        dig_action = tile === TILE_SOLID || tile === TILE_CRACKED ? 'tunnel' : 'hole';
+      if (ax > 0 && ay > 0 && ax < BOARD_W - 1 && ay < BOARD_H - 1) {
+        let tile = this.cur_level.get(ax, ay);
+        if (this.shovels && tile === TILE_OPEN) {
+          sprite_tiles.draw({
+            x: ax * TILE_W,
+            y: ay * TILE_W,
+            z: Z.PLAYER - 1,
+            frame: TILE_SHOVEL,
+          });
+          dig_action = 'hole';
+        } else if (this.shovels && (tile === TILE_SOLID || tile === TILE_CRACKED)) {
+          sprite_active.draw({
+            x: (ax + 0.5) * TILE_W,
+            y: (ay + 0.5) * TILE_W,
+            z: Z.PLAYER - 1,
+            frame: anim_drill.getFrame(engine.frame_dt),
+            rot: dir_to_rot[this.player_dir],
+          });
+          dig_action = 'tunnel';
+        }
       }
     }
     sprite_dwarf.draw({
@@ -437,6 +457,7 @@ class GameState {
       y: posy,
       z: Z.PLAYER,
       color: show_lower ? color_player_lower : color_white,
+      frame: player_animation.getFrame(engine.frame_dt),
     });
     if (!debug_zoom) {
       if (!this.shovels) {
@@ -458,8 +479,8 @@ class GameState {
         --this.shovels;
         if (dig_action === 'hole') {
           for (let ii = 0; ii < DIG_DX.length; ++ii) {
-            let yy = iy + DIG_DY[ii];
-            let xx = ix + DIG_DX[ii];
+            let yy = this.active_pos[1] + DIG_DY[ii];
+            let xx = this.active_pos[0] + DIG_DX[ii];
             if (xx <= 0 || yy <= 0 || xx >= BOARD_W - 1 || yy >= BOARD_H - 1) {
               continue;
             }
@@ -469,11 +490,11 @@ class GameState {
           }
         } else {
           assert(ix !== this.active_pos[0] || iy !== this.active_pos[1]);
-          let dx = this.active_pos[0] - ix;
-          let dy = this.active_pos[1] - iy;
-          for (let ii = 1; ii <= DIG_LEN; ++ii) {
-            let yy = iy + dy * ii;
-            let xx = ix + dx * ii;
+          let dx = DX[this.player_dir];
+          let dy = DY[this.player_dir];
+          for (let ii = 0; ii < DIG_LEN; ++ii) {
+            let yy = this.active_pos[1] + dy * ii;
+            let xx = this.active_pos[0] + dx * ii;
             if (xx <= 0 || yy <= 0 || xx >= BOARD_W - 1 || yy >= BOARD_H - 1) {
               break;
             }
@@ -534,11 +555,25 @@ class GameState {
     let dy = 0;
     dy -= input.keyDown(KEYS.UP) + input.keyDown(KEYS.W) + input.padButtonDown(PAD.UP);
     dy += input.keyDown(KEYS.DOWN) + input.keyDown(KEYS.S) + input.padButtonDown(PAD.DOWN);
-    // if (dx < 0) {
-    //   sprites.animation.setState('idle_left');
-    // } else if (dx > 0) {
-    //   sprites.animation.setState('idle_right');
-    // }
+    if (abs(dx) + abs(dy)) {
+      if (abs(dx) > abs(dy)) {
+        if (dx < 0) {
+          player_animation.setState('idle_left');
+          this.player_dir = 0;
+        } else {
+          player_animation.setState('idle_right');
+          this.player_dir = 1;
+        }
+      } else {
+        if (dy < 0) {
+          player_animation.setState('idle_up');
+          this.player_dir = 2;
+        } else {
+          player_animation.setState('idle_down');
+          this.player_dir = 3;
+        }
+      }
+    }
 
     dx *= 0.005;
     dy *= 0.005;
@@ -546,23 +581,74 @@ class GameState {
     let ix = floor(pos[0]);
     let iy = floor(pos[1]);
     let x2 = pos[0] + dx;
-    let ix2 = floor(x2);
     let y2 = pos[1] + dy;
-    let iy2 = floor(y2);
-    v2set(this.active_pos, abs(dx) >= abs(dy) ? ix2 : ix, abs(dy) > abs(dx) ? iy2 : iy);
-    if (ix !== ix2) {
-      if (cur_level.isSolid(ix2, iy) && !debug_freecam) {
-        x2 = ix2 > ix ? ix + 0.999 : ix;
+    const PLAYER_R = 0.25;
+    if (!debug_freecam) {
+      let xleft = floor(x2 - PLAYER_R);
+      let hit_wall = false;
+      if (cur_level.isSolid(xleft, iy)) {
+        x2 = xleft + 1 + PLAYER_R;
+        hit_wall = true;
+      }
+      let xright = floor(x2 + PLAYER_R);
+      if (cur_level.isSolid(xright, iy)) {
+        x2 = xright - PLAYER_R;
+        hit_wall = true;
+      }
+      let yup = floor(y2 - PLAYER_R);
+      if (cur_level.isSolid(ix, yup)) {
+        y2 = yup + 1 + PLAYER_R;
+        hit_wall = true;
+      }
+      let ydown = floor(y2 + PLAYER_R);
+      if (cur_level.isSolid(ix, ydown)) {
+        y2 = ydown - PLAYER_R;
+        hit_wall = true;
+      }
+      // check diagonals
+      if (!hit_wall) {
+        const DIAG = [[-1,-1], [-1,1], [1,1], [1,-1]];
+        for (let ii = 0; ii < DIAG.length; ++ii) {
+          let delta = DIAG[ii];
+          if (cur_level.isSolid(ix + delta[0], iy + delta[1])) {
+            let corner = [ix + delta[0] + (delta[0] < 0 ? 1 : 0), iy + delta[1] + (delta[1] < 0 ? 1 : 0)];
+            let temp = v2sub([0,0], [x2, y2], corner);
+            let len = sqrt(v2lengthSq(temp));
+            if (len < PLAYER_R) {
+              v2normalize(temp, temp);
+              v2addScale(temp, corner, temp, PLAYER_R);
+              x2 = temp[0];
+              y2 = temp[1];
+            }
+          }
+        }
       }
     }
-    if (iy !== iy2) {
-      if (cur_level.isSolid(ix, iy2) && !debug_freecam) {
-        y2 = iy2 > iy ? iy + 0.999 : iy;
+    if (!dx && !dy) {
+      // normalize to center
+      const NORMALIZE_DIST = 0.4;
+      let max_dist = engine.frame_dt * 0.002;
+      let delta = [0, 0];
+      for (let ii = 0; ii < 2; ii++) {
+        let ipos = floor(pos[ii]);
+        let fpart = pos[ii] - ipos;
+        delta[ii] = min(1 - NORMALIZE_DIST, max(NORMALIZE_DIST, fpart)) - fpart;
       }
+      let len_squared = v2lengthSq(delta);
+      if (len_squared > max_dist * max_dist) {
+        let scale = max_dist / sqrt(len_squared);
+        v2scale(delta, delta, scale);
+      }
+      v2add(pos, pos, delta);
+      x2 += delta[0];
+      y2 += delta[1];
     }
 
     pos[0] = x2;
     pos[1] = y2;
+    let ix2 = floor(x2);
+    let iy2 = floor(y2);
+    v2add(this.active_pos, [ix2, iy2], [DX[this.player_dir], DY[this.player_dir]]);
   }
 }
 
@@ -614,8 +700,28 @@ export function main() {
     hs: [16, 16, 16],
     origin: vec2(0,0),
   });
+  player_animation = sprite_animation.create({
+    idle_down: {
+      frames: [0],
+      times: [200],
+    },
+    idle_up: {
+      frames: [1],
+      times: [200],
+    },
+    idle_right: {
+      frames: [2],
+      times: [200],
+    },
+    idle_left: {
+      frames: [3],
+      times: [200],
+    },
+  });
   sprite_dwarf = sprites.create({
     name: 'dwarf',
+    ws: [16, 16],
+    hs: [16, 16],
     size: vec2(TILE_W, TILE_W),
     origin: vec2(0.5, 0.5),
   });
@@ -626,9 +732,18 @@ export function main() {
   });
   sprite_active = sprites.create({
     name: 'active',
+    ws: [16,16],
+    hs: [16,16],
     size: vec2(TILE_W, TILE_W),
-    origin: vec2(0, 0),
+    origin: vec2(0.5, 0.5),
   });
+  anim_drill = sprite_animation.create({
+    drill: {
+      frames: [0,1,2,3],
+      times: [120,120,120,120],
+    },
+  });
+  anim_drill.setState('drill');
 
   let state;
 
