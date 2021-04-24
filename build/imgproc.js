@@ -13,7 +13,7 @@ module.exports = function () {
     let out_path = file.relative.replace(/\/proc\//, '/');
     job.depAdd(`${file.relative}.opt`, function (err, dep_file) {
       let opts = {};
-      if (!err) {
+      if (!err && dep_file.contents) {
         try {
           opts = JSON.parse(dep_file.contents);
         } catch (e) {
@@ -24,7 +24,16 @@ module.exports = function () {
       try {
         pngin = PNG.sync.read(file.contents);
       } catch (e) {
-        return void done(e);
+        if (e.toString().indexOf('at end of stream') !== -1) {
+          // Chrome stated adding an extra 0?!
+          try {
+            pngin = PNG.sync.read(file.contents.slice(0, -1));
+          } catch (e2) {
+            return void done(e2);
+          }
+        } else {
+          return void done(e);
+        }
       }
       let ret;
       let { tile } = opts;

@@ -113,24 +113,26 @@ module.exports = {
     // Pass 1 - interpolate rows
     // buf1 has width of dst2 and height of src
     let buf1 = Buffer.alloc(wDst2 * hSrc * 4);
-    for (var i = 0; i < hSrc; i++) {
-      for (var j = 0; j < wDst2; j++) {
+    for (let i = 0; i < hSrc; i++) {
+      for (let j = 0; j < wDst2; j++) {
         // i in src coords, j in dst coords
 
         // calculate x in src coords
         // this interpolation requires 4 sample points and the two inner ones must be real
         // the outer points can be fudged for the edges.
         // therefore (wSrc-1)/wDst2
-        var x = (j + 0.5) * (wSrc-1) / wDst2 - 0.5;
-        var xPos = Math.floor(x);
-        var t = x - xPos;
+        let x = (j + 0.5) * (wSrc-1) / wDst2 - 0.5;
+        let xPos = Math.floor(x);
+        let t = x - xPos;
         let srcPos = (i * wSrc + xPos) * 4;
 
-        var buf1Pos = (i * wDst2 + j) * 4;
-        for (var k = 0; k < 4; k++) {
-          var kPos = srcPos + k;
-          let x0 = (xPos > 0) ? bufSrc[kPos - 4] : 2*bufSrc[kPos]-bufSrc[kPos+4];
-          let x1 = bufSrc[kPos];
+        let buf1Pos = (i * wDst2 + j) * 4;
+        for (let k = 0; k < 4; k++) {
+          let kPos = srcPos + k;
+          // let x0 = (xPos > 0) ? bufSrc[kPos - 4] : 2*bufSrc[kPos]-bufSrc[kPos+4];
+          // let x1 = bufSrc[kPos];
+          let x0 = (xPos >= 1) ? bufSrc[kPos - 4] : bufSrc[kPos - xPos * 4];
+          let x1 = (xPos >= 0) ? bufSrc[kPos] : bufSrc[kPos - xPos * 4];
           let x2 = bufSrc[kPos + 4];
           let x3 = (xPos < wSrc - 2) ? bufSrc[kPos + 8] : 2*bufSrc[kPos + 4]-bufSrc[kPos];
           buf1[buf1Pos+k] = interpolate(x0,x1,x2,x3,t);
@@ -143,26 +145,27 @@ module.exports = {
     // Pass 2 - interpolate columns
     // buf2 has width and height of dst2
     let buf2 = Buffer.alloc(wDst2 * hDst2 * 4);
-    for (var i = 0; i < hDst2; i++) {
-      for (var j = 0; j < wDst2; j++) {
+    for (let i = 0; i < hDst2; i++) {
+      for (let j = 0; j < wDst2; j++) {
         // i&j in dst2 coords
 
         // calculate y in buf1 coords
         // this interpolation requires 4 sample points and the two inner ones must be real
         // the outer points can be fudged for the edges.
         // therefore (hSrc-1)/hDst2
-        var y = (i + 0.5) * (hSrc-1) / hDst2 - 0.5;
-        var yPos = Math.floor(y);
-        var t = y - yPos;
-        var buf1Pos = (yPos * wDst2 + j) * 4;
+        let y = (i + 0.5) * (hSrc-1) / hDst2 - 0.5;
+        let yPos = Math.floor(y);
+        let t = y - yPos;
+        let buf1Pos = (yPos * wDst2 + j) * 4;
         let buf2Pos = (i * wDst2 + j) * 4;
-        for (var k = 0; k < 4; k++) {
-          var kPos = buf1Pos + k;
-          let y0 = (yPos > 0) ? buf1[kPos - wDst2*4] : 2*buf1[kPos]-buf1[kPos + wDst2*4];
-          let y1 = buf1[kPos];
+        for (let k = 0; k < 4; k++) {
+          let kPos = buf1Pos + k;
+          // let y0 = (yPos >= 1) ? buf1[kPos - wDst2*4] : 2*buf1[kPos]-buf1[kPos + wDst2*4];
+          // let y1 = buf1[kPos];
+          let y0 = (yPos >= 1) ? buf1[kPos - wDst2*4] : buf1[kPos - yPos * wDst2*4];
+          let y1 = (yPos >= 0) ? buf1[kPos] : buf1[kPos - yPos * wDst2*4];
           let y2 = buf1[kPos + wDst2*4];
           let y3 = (yPos < hSrc-2) ? buf1[kPos + wDst2*8] : 2*buf1[kPos + wDst2*4]-buf1[kPos];
-
           buf2[buf2Pos + k] = interpolate(y0,y1,y2,y3,t);
         }
       }
@@ -173,17 +176,17 @@ module.exports = {
     // Pass 3 - scale to dst
     let m = wM * hM;
     if (m > 1) {
-      for (var i = 0; i < hDst; i++) {
-        for (var j = 0; j < wDst; j++) {
+      for (let i = 0; i < hDst; i++) {
+        for (let j = 0; j < wDst; j++) {
           // i&j in dst bounded coords
           let r = 0;
           let g = 0;
           let b = 0;
           let a = 0;
-          for (var y = 0; y < hM; y++) {
-            var yPos = i * hM + y;
-            for (var x = 0; x < wM; x++) {
-              var xPos = j * wM + x;
+          for (let y = 0; y < hM; y++) {
+            let yPos = i * hM + y;
+            for (let x = 0; x < wM; x++) {
+              let xPos = j * wM + x;
               let xyPos = (yPos * wDst2 + xPos) * 4;
               r += buf2[xyPos];
               g += buf2[xyPos+1];
