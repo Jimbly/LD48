@@ -3,12 +3,11 @@ Untitled - LD48 - Deeper and deeper
 
 Ludum Dare 45 Entry by Jimbly
 
-minesweeper deductions on cracked rocks - different cracks for 2/3 adjacent gems
-  generally rocks always show number of adjacent gems this way?
 gem clustering
 game over detection
 obstacles
 accelerate if running long distances
+drill skips over empty spaces in the first 5, to match the displaced dig chart?
 
 particles upon shovel; drill; drill expire
 tutorial

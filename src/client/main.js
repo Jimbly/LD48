@@ -43,9 +43,11 @@ const TILE_BRIDGE = 10;
 const TILE_PIT = 5;
 const TILE_GEM_UI = 6;
 const TILE_GEM_UNLIT = 7;
-const TILE_CRACKED = 8;
+const TILE_CRACKED_1 = 8;
 const TILE_SHOVEL = 9;
 const TILE_BRIDGE_OVER_STONE = 11;
+const TILE_CRACKED_2 = 12;
+const TILE_CRACKED_3 = 13;
 
 const DRILL_TIME = 400;
 // const DIG_LEN = 5;
@@ -112,7 +114,7 @@ function canSeeThroughToBelow(tile) {
   return tile === TILE_BRIDGE || tile === TILE_PIT;
 }
 function isSolid(tile) {
-  return tile === TILE_SOLID || tile === TILE_CRACKED;
+  return tile === TILE_SOLID || tile === TILE_CRACKED_1 || tile === TILE_CRACKED_2 || tile === TILE_CRACKED_3;
 }
 function isDrillable(tile) {
   return isSolid(tile);
@@ -124,8 +126,8 @@ function canWalkThrough(tile) {
   return tile === TILE_BRIDGE || tile === TILE_OPEN || tile === TILE_GEM || tile === TILE_GEM_UNLIT;
 }
 
-let debug_zoom = engine.DEBUG;
-let debug_visible = engine.DEBUG;
+let debug_zoom = false;
+let debug_visible = false;
 let debug_freecam = false;
 
 const style_overlay = glov_font.style(null, {
@@ -291,10 +293,33 @@ class Level {
       map[yy][xx] = TILE_GEM_UNLIT;
       set.pts.push([xx,yy]);
       if (delta.length > 2) {
-        xx = pt[0] + delta[2];
-        yy = pt[1] + delta[3];
+        // xx = pt[0] + delta[2];
+        // yy = pt[1] + delta[3];
+        // if (map[yy][xx] === TILE_SOLID) {
+        //   map[yy][xx] = TILE_CRACKED;
+        // }
+      }
+    }
+
+    // Paint cracked
+    for (let yy = 1; yy < BOARD_H - 1; ++yy) {
+      for (let xx = 1; xx < BOARD_W - 1; ++xx) {
         if (map[yy][xx] === TILE_SOLID) {
-          map[yy][xx] = TILE_CRACKED;
+          let count = 0;
+          for (let ii = 0; ii < DX.length; ++ii) {
+            let x2 = xx + DX[ii];
+            let y2 = yy + DY[ii];
+            if (map[y2][x2] === TILE_GEM_UNLIT) {
+              ++count;
+            }
+          }
+          if (count === 1) {
+            map[yy][xx] = TILE_CRACKED_1;
+          } else if (count === 2) {
+            map[yy][xx] = TILE_CRACKED_2;
+          } else if (count === 3) {
+            map[yy][xx] = TILE_CRACKED_3;
+          }
         }
       }
     }
@@ -453,6 +478,9 @@ class Level {
     for (let ii = 0; ii < DX_ABOVE.length; ++ii) {
       let xx = x + DX_ABOVE[ii];
       let yy = y + DY_ABOVE[ii];
+      if (xx < 0 || xx >= BOARD_W || yy < 0 || yy >= BOARD_H) {
+        continue;
+      }
       this.setCellVisible(xx, yy);
     }
   }
@@ -491,6 +519,7 @@ class GameState {
   constructor() {
     this.gems_found = 0;
     this.gems_total = 0;
+    this.level = 1;
     this.cur_level = new Level(mashString(`1.${random()}`));
     this.cur_level.activateParticles();
     this.next_level = new Level(mashString(`2.${random()}`));
@@ -621,7 +650,7 @@ class GameState {
     let iy = floor(this.pos[1]);
     let message;
     let message_style = style_overlay;
-    if (!dig_action && !show_lower && !this.active_drill) {
+    if (!show_lower && !this.active_drill) {
       let cur_tile = this.cur_level.map[ay][ax];
       let next_tile = this.next_level.map[ay][ax];
       if (!this.drills && !this.shovels) {
@@ -653,6 +682,18 @@ class GameState {
           highlightTile(ax, ay, [0.1,0.1,0.1,1]);
           message_style = style_hint;
         }
+      } else if (cur_tile === TILE_CRACKED_1) {
+        message = 'This crack indicates ONE adjacent Gem.';
+        highlightTile(ax, ay, [0.1,0.1,0.1,1]);
+        message_style = style_hint;
+      } else if (cur_tile === TILE_CRACKED_2) {
+        message = 'This crack indicates TWO adjacent Gems.';
+        highlightTile(ax, ay, [0.1,0.1,0.1,1]);
+        message_style = style_hint;
+      } else if (cur_tile === TILE_CRACKED_3) {
+        message = 'This crack indicates THREE adjacent Gems.';
+        highlightTile(ax, ay, [0.1,0.1,0.1,1]);
+        message_style = style_hint;
       }
     }
     if (this.active_drill) {
@@ -727,15 +768,17 @@ class GameState {
         this.cur_level.activateParticles();
         this.cur_level.addOpenings(this.next_level);
         this.next_level = new Level(mashString(`${random()}`));
+        this.level++;
         this.pos[0] = ax + 0.5;
         this.pos[1] = ay + 0.5;
         this.shovels = 5;
         this.drills = 5;
         ui.playUISound('descend');
       }
-    } else if (message) {
-      font.drawSizedAligned(message_style, game_width - 4, game_height - ui.font_height - 4, Z.UI,
-        ui.font_height, font.ALIGN.HRIGHT, 0, 0, message);
+    }
+    if (message) {
+      font.drawSizedAligned(message_style, 4, game_height - ui.font_height - 4, Z.UI,
+        ui.font_height, font.ALIGN.HCENTER, game_width - 8, 0, message);
     }
 
   }
@@ -760,7 +803,7 @@ class GameState {
       ui.playUISound('drill_stop');
       return;
     }
-    if (this.cur_level.map[yy][xx] === TILE_SOLID || this.cur_level.map[yy][xx] === TILE_CRACKED) {
+    if (this.cur_level.isSolid(xx, yy)) {
       // this.cur_level.setVisibleFill(xx, yy);
     } else {
       this.active_drill = null;
@@ -932,13 +975,13 @@ export function main() {
     name: 'tiles',
     size: vec2(TILE_W, TILE_W),
     ws: [16, 16, 16, 16],
-    hs: [16, 16, 16],
+    hs: [16, 16, 16, 16],
     origin: vec2(0,0),
   });
   sprite_tiles_ui = sprites.create({
     name: 'tiles',
     ws: [16, 16, 16, 16],
-    hs: [16, 16, 16],
+    hs: [16, 16, 16, 16],
     origin: vec2(0,0),
   });
   player_animation = sprite_animation.create({
@@ -1000,6 +1043,11 @@ export function main() {
 
   let state;
 
+  function colorCount(count) {
+    return font.styleColored(style_overlay, count === 1 ?
+      pico8.font_colors[9] : count ? pico8.font_colors[7] : pico8.font_colors[8]);
+  }
+
   function play(dt) {
     gl.clearColor(0, 0, 0, 1);
     ui.print(style_overlay, 4, 4, Z.UI, '[shift] - view level below');
@@ -1008,43 +1056,74 @@ export function main() {
     let icon_size = ui.font_height * 2;
 
     let y = 0;
-    if (state.gems_total) {
+    if (state.gems_total || true) {
       sprite_tiles_ui.draw({
         x: game_width - 4 - icon_size, y, w: icon_size, h: icon_size, z: Z.UI,
         frame: TILE_GEM_UI,
       });
       font.drawSizedAligned(style_overlay, game_width - 4 - icon_size, y, Z.UI, ui.font_height * 2,
         font.ALIGN.HRIGHT, 0, 0,
-        `Total: ${state.gems_found + state.cur_level.gems_found}`);
+        //`Total: ${state.gems_found + state.cur_level.gems_found}`);
+        `Score: ${state.gems_found + state.cur_level.gems_found}`);
       y += icon_size + 4;
     }
-    sprite_tiles_ui.draw({
-      x: game_width - 4 - icon_size, y, w: icon_size, h: icon_size, z: Z.UI,
-      frame: TILE_GEM_UI,
-    });
+    // sprite_tiles_ui.draw({
+    //   x: game_width - 4 - icon_size, y, w: icon_size, h: icon_size, z: Z.UI,
+    //   frame: TILE_GEM_UI,
+    // });
+    // font.drawSizedAligned(style_overlay, game_width - 4 - icon_size, y, Z.UI, ui.font_height * 2,
+    //   font.ALIGN.HRIGHT, 0, 0,
+    //   `${state.gems_total ? 'Level: ' : ''}${state.cur_level.gems_found}`);
+    // y += icon_size + 4;
+
     font.drawSizedAligned(style_overlay, game_width - 4 - icon_size, y, Z.UI, ui.font_height * 2,
       font.ALIGN.HRIGHT, 0, 0,
-      `${state.gems_total ? 'Level: ' : ''}${state.cur_level.gems_found}`);
+      `Level: ${state.level}`);
     y += icon_size + 4;
 
-    sprite_tiles_ui.draw({
-      x: game_width - 4 - icon_size, y, w: icon_size, h: icon_size, z: Z.UI,
-      frame: TILE_SHOVEL,
-    });
-    font.drawSizedAligned(style_overlay, game_width - 4 - icon_size, y, Z.UI, ui.font_height * 2,
-      font.ALIGN.HRIGHT, 0, 0,
-      `${state.shovels}`);
-    y += icon_size + 4;
+    if ('tools on botttom') {
+      y = game_height - ui.font_height - 4 * 2 - icon_size;
+      if (state.pos[1] > BOARD_H - 4) {
+        y = 4;
+      }
+      let x = game_width / 2 - icon_size - 2;
+      sprite_tiles_ui.draw({
+        x, y, w: icon_size, h: icon_size, z: Z.UI,
+        frame: TILE_SHOVEL,
+      });
+      font.drawSizedAligned(colorCount(state.shovels), x, y, Z.UI, ui.font_height * 2,
+        font.ALIGN.HRIGHT, 0, 0,
+        `${state.shovels}`);
 
-    sprite_drill_ui.draw({
-      x: game_width - 4 - icon_size, y: y + icon_size, w: icon_size, h: icon_size, z: Z.UI,
-      frame: 0,
-      rot: 3*PI/2,
-    });
-    font.drawSizedAligned(style_overlay, game_width - 4 - icon_size, y, Z.UI, ui.font_height * 2,
-      font.ALIGN.HRIGHT, 0, 0,
-      `${state.drills}`);
-    y += icon_size + 4;
+      x = game_width / 2 + 2;
+      x += font.drawSizedAligned(colorCount(state.drills), x, y, Z.UI, ui.font_height * 2,
+        font.ALIGN.HLEFT, 0, 0,
+        `${state.drills}`);
+      sprite_drill_ui.draw({
+        x, y: y + icon_size, w: icon_size, h: icon_size, z: Z.UI,
+        frame: 0,
+        rot: 3*PI/2,
+      });
+    } else {
+      sprite_tiles_ui.draw({
+        x: game_width - 4 - icon_size, y, w: icon_size, h: icon_size, z: Z.UI,
+        frame: TILE_SHOVEL,
+      });
+      font.drawSizedAligned(style_overlay, game_width - 4 - icon_size, y, Z.UI, ui.font_height * 2,
+        font.ALIGN.HRIGHT, 0, 0,
+        `${state.shovels}`);
+      y += icon_size + 4;
+
+      sprite_drill_ui.draw({
+        x: game_width - 4 - icon_size, y: y + icon_size, w: icon_size, h: icon_size, z: Z.UI,
+        frame: 0,
+        rot: 3*PI/2,
+      });
+      font.drawSizedAligned(style_overlay, game_width - 4 - icon_size, y, Z.UI, ui.font_height * 2,
+        font.ALIGN.HRIGHT, 0, 0,
+        `${state.drills}`);
+      y += icon_size + 4;
+    }
 
     if (engine.DEBUG) {
       if (input.keyDownEdge(KEYS.R)) {
