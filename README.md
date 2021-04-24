@@ -3,20 +3,15 @@ Untitled - LD48 - Deeper and deeper
 
 Ludum Dare 45 Entry by Jimbly
 
-infini drill?
-shovels vs drills
-hole to solid rock to should just look very different - dirt over rock, not a hole at all
 less open space
 more visibility from shovels
 gem clustering
+game over detection
+obstacles
 
-Components:
-* Draft visuals, esp edges, viewable holes
-* Generate two levels, let you move around on one and destruct it
-  * Not full level view, but zoomed in with a minimap?
-* Show level underneath, add parallax
-* When destructing into an ore vein, score it
-* Tutorial
+particles upon shovel; drill; drill expire
+tutorial
+sounds / music
 
 Roguelike miner - Dwarven Scout/Surveyor?
 * Goal: extract as much ore from a level as possible while scouting the next level and choosing a place to dig

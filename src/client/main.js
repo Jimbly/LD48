@@ -13,12 +13,13 @@ const net = require('./glov/net.js');
 const ui = require('./glov/ui.js');
 const particles = require('./glov/particles.js');
 const particle_data = require('./particle_data.js');
+const pico8 = require('./glov/pico8.js');
 const { mashString, randCreate } = require('./glov/rand_alea.js');
 const sprites = require('./glov/sprites.js');
 const sprite_animation = require('./glov/sprite_animation.js');
-const { clamp } = require('../common/util.js');
+const { clamp, ridx } = require('../common/util.js');
 const {
-  vec2, v2add, v2addScale, v2floor, v2lengthSq, v2normalize, v2sub, v2scale, v2set,
+  vec2, v2add, v2addScale, v2floor, v2lengthSq, v2normalize, v2sub, v2scale,
   v3lerp, vec4, v4set,
 } = require('./glov/vmath.js');
 
@@ -44,10 +45,11 @@ const TILE_GEM_UI = 6;
 // const TILE_INVISIBLE = 7;
 const TILE_CRACKED = 8;
 const TILE_SHOVEL = 9;
+const TILE_BRIDGE_OVER_STONE = 11;
 
 const DRILL_TIME = 400;
 // const DIG_LEN = 5;
-const DRILL_TRIGGER_TIME = 400;
+const DRILL_TRIGGER_TIME = 600;
 
 const BOARD_W = 48;
 const BOARD_H = 32;
@@ -99,6 +101,11 @@ const GEM_DELTA = [
   [0, 2, 0, 1],
 ];
 
+const ROOM_DELTA = [
+  // adjacent
+  [-1, 0], [0, -1], [0, 1], [1, 0],
+];
+
 function canSeeThroughToBelow(tile) {
   return tile === TILE_BRIDGE || tile === TILE_PIT;
 }
@@ -115,8 +122,8 @@ function canWalkThrough(tile) {
   return tile === TILE_BRIDGE || tile === TILE_OPEN || tile === TILE_GEM;
 }
 
-let debug_zoom = false;
-let debug_visible = false;
+let debug_zoom = engine.DEBUG;
+let debug_visible = engine.DEBUG;
 let debug_freecam = false;
 
 const style_overlay = glov_font.style(null, {
@@ -204,25 +211,58 @@ class Level {
         this.lit[ii].push(0);
       }
     }
-    let rand = randCreate(seed);
+    let rand = this.rand = randCreate(seed);
     // rooms
-    for (let ii = 0; ii < 20; ++ii) {
-      let w = 2 + rand.range(8);
-      let h = 2 + rand.range(8);
-      let x = 1 + rand.range(BOARD_W - w - 2);
-      let y = 1 + rand.range(BOARD_H - h - 2);
-      for (let yy = 0; yy < h; ++yy) {
-        for (let xx = 0; xx < w; ++xx) {
-          map[y + yy][x + xx] = rand.random() < 0.05 ? TILE_BRIDGE : TILE_OPEN;
-        }
+    let num_rooms = this.num_rooms = 20;
+    this.num_openings_good = 20;
+    this.num_openings_bad = 20;
+    let num_gems = this.gems_total = 100;
+    // for (let ii = 0; ii < num_rooms; ++ii) {
+    //   let w = 2 + rand.range(8);
+    //   let h = 2 + rand.range(8);
+    //   let x = 1 + rand.range(BOARD_W - w - 2);
+    //   let y = 1 + rand.range(BOARD_H - h - 2);
+    //   for (let yy = 0; yy < h; ++yy) {
+    //     for (let xx = 0; xx < w; ++xx) {
+    //       map[y + yy][x + xx] = rand.random() < 0.05 ? TILE_BRIDGE : TILE_OPEN;
+    //     }
+    //   }
+    //   if (!ii) {
+    //     this.spawn_pos = vec2(floor(x + w/2) + 0.5, floor(y + h/2) + 0.5);
+    //   }
+    // }
+    let best_spawn = -1;
+    for (let ii = 0; ii < num_rooms; ++ii) {
+      let size = 8 + rand.range(64);
+      let x = 1 + rand.range(BOARD_W - 2);
+      let y = 1 + rand.range(BOARD_H - 2);
+      if (map[y][x] !== TILE_SOLID) {
+        continue;
       }
-      if (!ii) {
-        this.spawn_pos = vec2(floor(x + w/2) + 0.5, floor(y + h/2) + 0.5);
+      let pts = [[x,y]];
+      map[y][x] = TILE_OPEN;
+      if (size > best_spawn) {
+        this.spawn_pos = vec2(x + 0.5, y + 0.5);
+        best_spawn = size;
+      }
+      while (size) {
+        --size;
+        let pt = pts[rand.range(pts.length)];
+        let delta = ROOM_DELTA[rand.range(ROOM_DELTA.length)];
+        let xx = pt[0] + delta[0];
+        let yy = pt[1] + delta[1];
+        if (yy < 1 || yy >= BOARD_H - 1 || xx < 1 || xx >= BOARD_W - 1) {
+          continue;
+        }
+        if (map[yy][xx] !== TILE_SOLID) {
+          continue;
+        }
+        map[yy][xx] = TILE_OPEN;
+        pts.push([xx,yy]);
       }
     }
     // ore
     let gem_sets = [];
-    let num_gems = this.gems_total = 100;
     this.gems_found = 0;
     for (let ii = 0; ii < 20; ++ii) {
       let x = 1 + rand.range(BOARD_W - 2);
@@ -255,6 +295,39 @@ class Level {
           map[yy][xx] = TILE_CRACKED;
         }
       }
+    }
+  }
+
+  addOpenings(next_level) {
+    let { map, num_openings_good, num_openings_bad, rand } = this;
+    // openings
+    let possible_spots_good = [];
+    let possible_spots_bad = [];
+    for (let yy = 0; yy < BOARD_H; ++yy) {
+      let row = map[yy];
+      for (let xx = 0; xx < BOARD_W; ++xx) {
+        if (row[xx] === TILE_OPEN) {
+          if (next_level.isSolid(xx, yy)) {
+            possible_spots_bad.push([xx,yy]);
+          } else {
+            possible_spots_good.push([xx,yy]);
+          }
+        }
+      }
+    }
+    while (num_openings_good && possible_spots_good.length) {
+      --num_openings_good;
+      let idx = rand.range(possible_spots_good.length);
+      let pos = possible_spots_good[idx];
+      ridx(possible_spots_good, idx);
+      map[pos[1]][pos[0]] = TILE_BRIDGE;
+    }
+    while (num_openings_bad && possible_spots_bad.length) {
+      --num_openings_bad;
+      let idx = rand.range(possible_spots_bad.length);
+      let pos = possible_spots_bad[idx];
+      ridx(possible_spots_bad, idx);
+      map[pos[1]][pos[0]] = TILE_BRIDGE;
     }
   }
 
@@ -299,6 +372,9 @@ class Level {
               color: cc,
             });
             zz += 0.01;
+          }
+          if (tile === TILE_BRIDGE && next_level && next_level.isSolid(xx, yy)) {
+            tile = TILE_BRIDGE_OVER_STONE;
           }
           sprite_tiles.draw({
             x: xx * TILE_W,
@@ -402,7 +478,9 @@ const dir_to_rot = [PI/2, 3*PI/2, PI, 0];
 
 function highlightTile(xx, yy, color) {
   let w = 1;
-  ui.drawHollowRect(xx * TILE_W + w/2, yy * TILE_W + w/2, (xx+1)*TILE_W - w/2, (yy+1)*TILE_W - w/2, Z.PLAYER - 1,
+  let w_offs = 0.9/2;
+  ui.drawHollowRect(xx * TILE_W + w_offs, yy * TILE_W + w_offs,
+    (xx+1)*TILE_W - w_offs, (yy+1)*TILE_W - w_offs, Z.PLAYER - 1,
     w, 1, color);
 }
 
@@ -410,15 +488,16 @@ class GameState {
   constructor() {
     this.gems_found = 0;
     this.gems_total = 0;
-    this.cur_level = new Level(mashString('1')); // `1.${random()}`));
+    this.cur_level = new Level(mashString(`1.${random()}`));
     this.cur_level.activateParticles();
-    this.next_level = new Level(mashString('2')); // `2.${random()}`));
+    this.next_level = new Level(mashString(`2.${random()}`));
+    this.cur_level.addOpenings(this.next_level);
     this.pos = this.cur_level.spawn_pos.slice(0);
     player_animation.setState('idle_down');
     this.player_dir = 3; // down
     this.active_pos = vec2();
     this.shovels = 3;
-    this.drills = 3;
+    this.drills = 5;
   }
 
   setMainCamera() {
@@ -442,10 +521,10 @@ class GameState {
     this.cur_level.tickVisibility(this.pos[0], this.pos[1]);
     let show_lower = input.keyDown(KEYS.SHIFT);
     let dig_action;
+    let ax = this.active_pos[0];
+    let ay = this.active_pos[1];
     if (!show_lower) {
       this.cur_level.draw(Z.LEVEL, color_white, this.next_level);
-      let ax = this.active_pos[0];
-      let ay = this.active_pos[1];
       if (ax > 0 && ay > 0 && ax < BOARD_W - 1 && ay < BOARD_H - 1 && !this.active_drill) {
         let tile = this.cur_level.get(ax, ay);
         if (this.shovels && tile === TILE_OPEN) {
@@ -539,27 +618,32 @@ class GameState {
     let iy = floor(this.pos[1]);
     let message;
     let message_style = style_overlay;
-    if (!dig_action) {
-      let cur_tile = this.cur_level.map[iy][ix];
-      let next_tile = this.next_level.map[iy][ix];
+    if (!dig_action && !show_lower && !this.active_drill) {
+      let cur_tile = this.cur_level.map[ay][ax];
+      let next_tile = this.next_level.map[ay][ax];
       if (!this.drills && !this.shovels) {
         if (cur_tile === TILE_BRIDGE && canWalkThrough(next_tile)) {
           dig_action = 'descend';
-          highlightTile(ix, iy, [0,1,0,1]);
+          highlightTile(ax, ay, [0,1,0,1]);
         } else if (cur_tile === TILE_BRIDGE) {
           message = 'You can\'t jump down here.';
+          highlightTile(ax, ay, [0.1,0.1,0.1,1]);
         } else {
           message = 'Out of tools! Find a clear hole to jump down.';
+          highlightTile(ax, ay, [0.1,0.1,0.1,1]);
         }
       } else if (cur_tile === TILE_GEM) {
         message = 'This is a Gem, it will be collected when you leave the level.';
+        highlightTile(ax, ay, pico8.colors[10]);
         message_style = style_hint;
       } else if (cur_tile === TILE_BRIDGE) {
         if (canWalkThrough(next_tile)) {
           message = 'This is a hole, jump down it when you are out of tools.';
+          highlightTile(ax, ay, [0.1,0.1,0.1,1]);
           message_style = style_hint;
         } else {
           message = 'A hole was dug here, but it is not clear below.';
+          highlightTile(ax, ay, [0.1,0.1,0.1,1]);
           message_style = style_hint;
         }
       }
@@ -634,7 +718,10 @@ class GameState {
         this.gems_total += this.cur_level.gems_total;
         this.cur_level = this.next_level;
         this.cur_level.activateParticles();
+        this.cur_level.addOpenings(this.next_level);
         this.next_level = new Level(mashString(`${random()}`));
+        this.pos[0] = ax + 0.5;
+        this.pos[1] = ay + 0.5;
         this.shovels = 5;
         this.drills = 5;
         ui.playUISound('descend');
@@ -921,7 +1008,7 @@ export function main() {
       });
       font.drawSizedAligned(style_overlay, game_width - 4 - icon_size, y, Z.UI, ui.font_height * 2,
         font.ALIGN.HRIGHT, 0, 0,
-        `${state.gems_found + state.cur_level.gems_found}`);
+        `Total: ${state.gems_found + state.cur_level.gems_found}`);
       y += icon_size + 4;
     }
     sprite_tiles_ui.draw({
@@ -930,7 +1017,7 @@ export function main() {
     });
     font.drawSizedAligned(style_overlay, game_width - 4 - icon_size, y, Z.UI, ui.font_height * 2,
       font.ALIGN.HRIGHT, 0, 0,
-      `${state.cur_level.gems_found}/${state.cur_level.gems_total}`);
+      `${state.gems_total ? 'Level: ' : ''}${state.cur_level.gems_found}`);
     y += icon_size + 4;
 
     sprite_tiles_ui.draw({
