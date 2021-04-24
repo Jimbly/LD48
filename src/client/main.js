@@ -16,6 +16,7 @@ const particles = require('./glov/particles.js');
 const particle_data = require('./particle_data.js');
 const pico8 = require('./glov/pico8.js');
 const { mashString, randCreate } = require('./glov/rand_alea.js');
+const { randSimpleSpatial } = require('./glov/rand_fast.js');
 const sprites = require('./glov/sprites.js');
 const sprite_animation = require('./glov/sprite_animation.js');
 const { clamp, ridx } = require('../common/util.js');
@@ -37,18 +38,18 @@ const game_width = 384;
 const game_height = 256;
 
 const TILE_SOLID = 0;
-const TILE_GEM = 1;
-const TILE_LAVA = 2;
-const TILE_OPEN = 3;
-const TILE_BRIDGE = 10;
-const TILE_PIT = 5;
-const TILE_GEM_UI = 6;
-const TILE_GEM_UNLIT = 7;
-const TILE_CRACKED_1 = 8;
-const TILE_SHOVEL = 9;
-const TILE_BRIDGE_OVER_STONE = 11;
-const TILE_CRACKED_2 = 12;
-const TILE_CRACKED_3 = 13;
+const TILE_LAVA = 1; // 2, 3
+const TILE_OPEN = 4;
+const TILE_BRIDGE = 5;
+const TILE_PIT = 7;
+const TILE_BRIDGE_OVER_STONE = 8;
+const TILE_GEM = 9;
+const TILE_GEM_UI = 10;
+const TILE_GEM_UNLIT = 11;
+const TILE_CRACKED_1 = 12;
+const TILE_CRACKED_2 = 13;
+const TILE_CRACKED_3 = 14;
+const TILE_SHOVEL = 15;
 
 const DRILL_TIME = 400;
 // const DIG_LEN = 5;
@@ -437,7 +438,7 @@ class Level {
     return isSolid(this.get(x, y));
   }
 
-  draw(z, color, next_level) {
+  draw(z, color, next_level, noise_3d) {
     for (let yy = 0; yy < this.h; ++yy) {
       let row = this.map[yy];
       let vrow = this.visible[yy];
@@ -452,6 +453,7 @@ class Level {
           let lvalue = lrow[xx];
           if (tile === TILE_LAVA) {
             lvalue = 1;
+            tile = TILE_LAVA + floor(randSimpleSpatial(xx, yy, 0) * engine.frame_timestamp * 0.001) % 3;
           }
           if (NOISE_DEBUG) {
             cc = v3lerp(temp_color, lrow[xx], [0,0,0,1], [1,1,1,1]);
@@ -608,7 +610,7 @@ class GameState {
     let ax = this.active_pos[0];
     let ay = this.active_pos[1];
     if (!show_lower) {
-      this.cur_level.draw(Z.LEVEL, color_white, this.next_level);
+      this.cur_level.draw(Z.LEVEL, color_white, this.next_level, this.noise_3d);
       if (ax > 0 && ay > 0 && ax < BOARD_W - 1 && ay < BOARD_H - 1 && !this.active_drill) {
         let tile = this.cur_level.get(ax, ay);
         if (this.shovels && tile === TILE_OPEN) {
@@ -764,7 +766,7 @@ class GameState {
       }
       camera2d.zoom(posx, posy, 0.95);
     }
-    this.next_level.draw(Z.LEVEL - 2, show_lower ? color_white : color_next_level);
+    this.next_level.draw(Z.LEVEL - 2, show_lower ? color_white : color_next_level, null, this.noise_3d);
     camera2d.setAspectFixed(game_width, game_height);
     if (dig_action === 'hole' || dig_action === 'drill') {
       if (ui.button({
