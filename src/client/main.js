@@ -38,7 +38,7 @@ const game_height = 256;
 
 const TILE_SOLID = 0;
 const TILE_GEM = 1;
-// const TILE_LAVA = 2;
+const TILE_LAVA = 2;
 const TILE_OPEN = 3;
 const TILE_BRIDGE = 10;
 const TILE_PIT = 5;
@@ -110,6 +110,16 @@ const ROOM_DELTA = [
   // adjacent
   [-1, 0], [0, -1], [0, 1], [1, 0],
 ];
+const LAVA_DELTA = [
+  // adjacent
+  [-1, 0], [0, -1], [0, 1], [1, 0],
+  // bias lower right
+  [1, 0], [0, 1],
+  [1, 0], [0, 1],
+  [1, 1], [1, 1], [1, 1], [1, 1],
+  [1, 1], [1, 1], [1, 1], [1, 1],
+];
+
 
 function canSeeThroughToBelow(tile) {
   return tile === TILE_BRIDGE || tile === TILE_PIT;
@@ -317,6 +327,39 @@ class Level {
       }
     }
 
+    // Lava
+    let num_lava = level_idx;
+    let aborts = 100;
+    for (let ii = 0; ii < num_lava; ++ii) {
+      let x = 1 + rand.range(BOARD_W - 2);
+      let y = 1 + rand.range(BOARD_H - 2);
+      if (map[y][x] !== TILE_SOLID) {
+        if (!--aborts) {
+          break;
+        }
+        --ii;
+        continue;
+      }
+      let size = 32 + rand.range(64);
+      let pts = [[x,y]];
+      map[y][x] = TILE_LAVA;
+      while (size) {
+        --size;
+        let pt = pts[rand.range(pts.length)];
+        let delta = LAVA_DELTA[rand.range(LAVA_DELTA.length)];
+        let xx = pt[0] + delta[0];
+        let yy = pt[1] + delta[1];
+        if (yy < 1 || yy >= BOARD_H - 1 || xx < 1 || xx >= BOARD_W - 1) {
+          continue;
+        }
+        if (map[yy][xx] !== TILE_SOLID) {
+          continue;
+        }
+        map[yy][xx] = TILE_LAVA;
+        pts.push([xx,yy]);
+      }
+    }
+
     // Paint cracked
     for (let yy = 1; yy < BOARD_H - 1; ++yy) {
       for (let xx = 1; xx < BOARD_W - 1; ++xx) {
@@ -359,7 +402,7 @@ class Level {
       let row = map[yy];
       for (let xx = 0; xx < BOARD_W; ++xx) {
         if (row[xx] === TILE_OPEN) {
-          if (next_level.isSolid(xx, yy)) {
+          if (!canWalkThrough(next_level.get(xx, yy))) {
             possible_spots_bad.push([xx,yy]);
           } else {
             possible_spots_good.push([xx,yy]);
@@ -405,16 +448,17 @@ class Level {
           if ((!debug_visible || vrow[xx]) && next_level && canSeeThroughToBelow(tile)) {
             next_level.setVisibleFromAbove(xx, yy);
           }
-          // if (vrow[xx] && next_level && canSeeThrough(tile)) {
-          //   this.setVisibleFill(xx, yy);
-          // }
           let cc = color;
+          let lvalue = lrow[xx];
+          if (tile === TILE_LAVA) {
+            lvalue = 1;
+          }
           if (NOISE_DEBUG) {
             cc = v3lerp(temp_color, lrow[xx], [0,0,0,1], [1,1,1,1]);
           } else if (!vrow[xx]) {
             cc = color_debug_visible;
-          } else if (lrow[xx] !== 1) {
-            cc = v3lerp(temp_color, lrow[xx], color_unlit, color);
+          } else if (lvalue !== 1) {
+            cc = v3lerp(temp_color, lvalue, color_unlit, color);
           }
           let zz = z;
           if (tile === TILE_GEM || tile === TILE_GEM_UNLIT) {
@@ -478,28 +522,6 @@ class Level {
     }
   }
 
-  setVisibleFill(x, y) {
-    let todo = [];
-    todo.push(x,y);
-    while (todo.length) {
-      y = todo.pop();
-      x = todo.pop();
-      // if (this.visible[y][x]) {
-      //   continue;
-      // }
-      this.setCellVisible(x, y);
-      if (this.isSolid(x, y)) {
-        continue;
-      }
-      for (let ii = 0; ii < DX.length; ++ii) {
-        let xx = x + DX[ii];
-        let yy = y + DY[ii];
-        if (!this.visible[yy][xx]) {
-          todo.push(xx,yy);
-        }
-      }
-    }
-  }
   setVisibleFromAbove(x, y) {
     this.lit[y][x] = 1;
     for (let ii = 0; ii < DX_ABOVE.length; ++ii) {
@@ -558,8 +580,8 @@ class GameState {
     player_animation.setState('idle_down');
     this.player_dir = 3; // down
     this.active_pos = vec2();
-    this.shovels = 0; // 3;
-    this.drills = 0; // 5;
+    this.shovels = 3;
+    this.drills = 5;
   }
 
   setMainCamera() {
@@ -698,6 +720,10 @@ class GameState {
         message = 'This is a Gem, it will be collected when you leave the level.';
         highlightTile(ax, ay, pico8.colors[10]);
         message_style = style_hint;
+      } else if (cur_tile === TILE_LAVA) {
+        message = 'You\'re not stupid enough to step in this.';
+        highlightTile(ax, ay, pico8.colors[9]);
+        message_style = style_hint;
       } else if (cur_tile === TILE_GEM_UNLIT) {
         message = 'This is a Gem, you must get close to claim it.';
         highlightTile(ax, ay, pico8.colors[10]);
@@ -769,21 +795,6 @@ class GameState {
             count: 0,
             countdown: 0,
           };
-          // let dx = DX[this.player_dir];
-          // let dy = DY[this.player_dir];
-          // for (let ii = 0; ii < DIG_LEN; ++ii) {
-          //   let yy = this.active_pos[1] + dy * ii;
-          //   let xx = this.active_pos[0] + dx * ii;
-          //   if (xx <= 0 || yy <= 0 || xx >= BOARD_W - 1 || yy >= BOARD_H - 1) {
-          //     break;
-          //   }
-          //   if (this.cur_level.map[yy][xx] === TILE_SOLID || this.cur_level.map[yy][xx] === TILE_CRACKED) {
-          //     this.cur_level.map[yy][xx] = TILE_OPEN;
-          //     // this.cur_level.setVisibleFill(xx, yy);
-          //   } else {
-          //     break;
-          //   }
-          // }
         }
       }
     } else if (dig_action === 'descend') {
@@ -833,9 +844,7 @@ class GameState {
       ui.playUISound('drill_stop');
       return;
     }
-    if (this.cur_level.isSolid(xx, yy)) {
-      // this.cur_level.setVisibleFill(xx, yy);
-    } else {
+    if (!this.cur_level.isSolid(xx, yy)) {
       this.active_drill = null;
       ui.playUISound('drill_stop');
       return;
@@ -890,22 +899,22 @@ class GameState {
     if (!debug_freecam) {
       let xleft = floor(x2 - PLAYER_R);
       let hit_wall = false;
-      if (cur_level.isSolid(xleft, iy)) {
+      if (!canWalkThrough(cur_level.get(xleft, iy))) {
         x2 = xleft + 1 + PLAYER_R;
         hit_wall = true;
       }
       let xright = floor(x2 + PLAYER_R);
-      if (cur_level.isSolid(xright, iy)) {
+      if (!canWalkThrough(cur_level.get(xright, iy))) {
         x2 = xright - PLAYER_R;
         hit_wall = true;
       }
       let yup = floor(y2 - PLAYER_R);
-      if (cur_level.isSolid(ix, yup)) {
+      if (!canWalkThrough(cur_level.get(ix, yup))) {
         y2 = yup + 1 + PLAYER_R;
         hit_wall = true;
       }
       let ydown = floor(y2 + PLAYER_R);
-      if (cur_level.isSolid(ix, ydown)) {
+      if (!canWalkThrough(cur_level.get(ix, ydown))) {
         y2 = ydown - PLAYER_R;
         hit_wall = true;
       }
@@ -1116,7 +1125,7 @@ export function main() {
       if (state.pos[1] > BOARD_H - 4) {
         y = 4;
       }
-      let x = game_width / 2 - icon_size - 2;
+      let x = game_width / 2 - icon_size - 8;
       sprite_tiles_ui.draw({
         x, y, w: icon_size, h: icon_size, z: Z.UI,
         frame: TILE_SHOVEL,
