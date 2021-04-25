@@ -5,12 +5,13 @@ Ludum Dare 45 Entry by Jimbly
 
 ### TODO
 
-tutorial
 sounds / music
 main menu / restart/resume / start / sound / music toggles
 high scores
+tutorial?
 better character
 better world tiles
+balance / fun ?
 
 
 ### Original brainstorming notes

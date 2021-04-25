@@ -149,6 +149,7 @@ let NOISE_DEBUG = false;
 let debug_zoom = false;
 let debug_visible = false;
 let debug_freecam = false;
+let random_seed = false;
 
 const style_overlay = glov_font.style(null, {
   color: 0xFFFFFFff,
@@ -615,18 +616,18 @@ class GameState {
     this.gems_found = 0;
     this.gems_total = 0;
     this.level = 1;
-    this.noise_3d = createNoise3D(`3d.${random()}`);
-    this.cur_level = new Level(mashString(`1.${random()}`), this.noise_3d, this.level);
+    this.noise_3d = createNoise3D(random_seed ? `3d.${random()}` : '3d');
+    this.cur_level = new Level(mashString(random_seed ? `1.${random()}` : '1'), this.noise_3d, this.level);
     this.cur_level.activateParticles();
-    this.next_level = new Level(mashString(`2.${random()}`), this.noise_3d, this.level + 1);
+    this.next_level = new Level(mashString(random_seed ? `2.${random()}` : '2'), this.noise_3d, this.level + 1);
     this.cur_level.addOpenings(this.next_level);
     this.pos = this.cur_level.spawn_pos.slice(0);
     this.run_time = 0;
     player_animation.setState('idle_down');
     this.player_dir = 3; // down
     this.active_pos = vec2();
-    this.shovels = 0; // 3;
-    this.drills = 0; // 5;
+    this.shovels = 3;
+    this.drills = 5;
   }
 
   setMainCamera() {
@@ -855,7 +856,8 @@ class GameState {
         this.cur_level.activateParticles();
         this.cur_level.addOpenings(this.next_level);
         this.level++;
-        this.next_level = new Level(mashString(`${random()}`), this.noise_3d, this.level + 1);
+        this.next_level = new Level(mashString(random_seed ? `${random()}` : `${this.level+1}`),
+          this.noise_3d, this.level + 1);
         this.pos[0] = ax + 0.5;
         this.pos[1] = ay + 0.5;
         ui.playUISound('descend');
