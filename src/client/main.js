@@ -144,8 +144,8 @@ function canWalkThrough(tile) {
 }
 
 let NOISE_DEBUG = false;
-let debug_zoom = engine.DEBUG;
-let debug_visible = engine.DEBUG;
+let debug_zoom = false;
+let debug_visible = false;
 let debug_freecam = false;
 
 const style_overlay = glov_font.style(null, {
@@ -218,6 +218,14 @@ let raycast = (function () {
     return ret;
   };
 }());
+
+
+function particle(xx, yy, key) {
+  engine.glov_particles.createSystem(particle_data.defs[key],
+    [(xx + 0.5) * TILE_W, (yy + 0.5) * TILE_W, Z.PARTICLES]
+  );
+}
+
 
 let temp_color = vec4(0,0,0,1);
 
@@ -506,9 +514,7 @@ class Level {
     // for (let yy = 0; yy < BOARD_H; ++yy) {
     //   for (let xx = 0; xx < BOARD_W; ++xx) {
     //     if (this.map[yy][xx] === TILE_GEM && this.visible[yy][xx]) {
-    //       engine.glov_particles.createSystem(particle_data.defs.gem_found,
-    //         [(xx + 0.5) * TILE_W, (yy + 0.5) * TILE_W, Z.PARTICLES]
-    //       );
+    //       particle(xx, yy, 'gem_found');,
     //     }
     //   }
     // }
@@ -521,9 +527,7 @@ class Level {
     if (this.map[y][x] === TILE_GEM_UNLIT && lit_value > 0.5) {
       if (this.particles) {
         ui.playUISound('gem_found');
-        engine.glov_particles.createSystem(particle_data.defs.gem_found,
-          [(x + 0.5) * TILE_W, (y + 0.5) * TILE_W, Z.PARTICLES]
-        );
+        particle(x, y, 'gem_found');
       }
       this.map[y][x] = TILE_GEM;
       this.gems_found++;
@@ -820,6 +824,7 @@ class GameState {
             }
             if (this.cur_level.map[yy][xx] === TILE_OPEN) {
               this.cur_level.map[yy][xx] = TILE_BRIDGE;
+              particle(xx, yy, 'shovel');
             }
           }
         } else {
@@ -873,6 +878,7 @@ class GameState {
     let [xx, yy] = pos;
     let do_drill = this.cur_level.isSolid(xx, yy);
     if (do_drill) {
+      particle(xx, yy, 'drill');
       this.cur_level.map[yy][xx] = TILE_OPEN;
     }
     pos[0] += DX[dir];
@@ -881,12 +887,14 @@ class GameState {
     yy = pos[1];
     if (xx <= 0 || yy <= 0 || xx >= BOARD_W - 1 || yy >= BOARD_H - 1) {
       this.active_drill = null;
+      particle(xx, yy, 'drill_stop');
       ui.playUISound('drill_stop');
       return;
     }
     let tile = this.cur_level.get(xx, yy);
     if (!isDrillable(tile) && active_drill.count >= 3 || forceStopsDrill(tile)) {
       this.active_drill = null;
+      particle(xx, yy, 'drill_stop');
       ui.playUISound('drill_stop');
       return;
     }

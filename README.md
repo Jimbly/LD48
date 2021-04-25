@@ -3,10 +3,9 @@ Untitled - LD48 - Deeper and deeper
 
 Ludum Dare 45 Entry by Jimbly
 
-particles upon shovel; drill; drill expire
+when going down - fade to black, increment tools, increment level, fade back from black
 tutorial
 sounds / music
-when going down - fade to black, increment tools, increment level, fade back from black
 
 Roguelike miner - Dwarven Scout/Surveyor?
 * Goal: extract as much ore from a level as possible while scouting the next level and choosing a place to dig
