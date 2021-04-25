@@ -229,6 +229,7 @@ class Level {
     this.w = BOARD_W;
     this.h = BOARD_H;
     this.particles = false;
+    this.did_game_over_detect = false;
     let map = this.map = [];
     this.visible = [];
     this.lit = [];
@@ -560,6 +561,34 @@ class Level {
       let stheta = sin(theta);
       raycast(this, [x0, y0], [ctheta, stheta], 100, dvis * 4);
     }
+  }
+
+  checkGameOver(pos, next_level) {
+    let todo = [];
+    let done = {};
+    function add(pair) {
+      let key = pair[0] + pair[1] * BOARD_W;
+      if (done[key]) {
+        return;
+      }
+      done[key] = true;
+      todo.push(pair);
+    }
+    add(v2floor([], pos));
+    while (todo.length) {
+      let pair = todo.pop();
+      let tile = this.get(pair[0], pair[1]);
+      if (!canWalkThrough(tile)) {
+        continue;
+      }
+      if (canSeeThroughToBelow(tile) && canWalkThrough(next_level.get(pair[0], pair[1]))) {
+        return false;
+      }
+      for (let ii = 0; ii < DX.length; ++ii) {
+        add([pair[0] + DX[ii], pair[1] + DY[ii]]);
+      }
+    }
+    return true;
   }
 }
 
@@ -987,6 +1016,19 @@ class GameState {
     let ix2 = floor(x2);
     let iy2 = floor(y2);
     v2add(this.active_pos, [ix2, iy2], [DX[this.player_dir], DY[this.player_dir]]);
+
+    if (!this.active_drill && !this.shovels && !this.drills && !this.cur_level.did_game_over_detect) {
+      this.cur_level.did_game_over_detect = true;
+      if (this.cur_level.checkGameOver(this.pos, this.next_level)) {
+        ui.modalDialog({
+          title: 'Game Over',
+          text: 'Sorry, you\'re stuck, with no way to proceed!  Probably you\'re just unlucky?',
+          buttons: {
+            OK: null
+          },
+        });
+      }
+    }
   }
 }
 

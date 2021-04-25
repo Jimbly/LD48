@@ -3,8 +3,6 @@ Untitled - LD48 - Deeper and deeper
 
 Ludum Dare 45 Entry by Jimbly
 
-game over detection
-
 particles upon shovel; drill; drill expire
 tutorial
 sounds / music
