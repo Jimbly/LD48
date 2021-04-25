@@ -185,7 +185,7 @@ let raycast = (function () {
   let t_max = vec2();
   let t_delta = vec2();
   return function raycastFn(level, startpos, dir, max_len, dvis) {
-    let { map, lit } = level;
+    let { map } = level;
     v2floor(walk, startpos);
     // init
     for (let ii = 0; ii < 2; ++ii) {
@@ -205,9 +205,10 @@ let raycast = (function () {
       }
     }
 
-    let lit_value = min(1, lit[walk[1]][walk[0]] + dvis);
+    let cell = map[walk[1]][walk[0]];
+    let lit_value = min(1, cell.lit + dvis);
     if (!NOISE_DEBUG) {
-      lit[walk[1]][walk[0]] = lit_value;
+      cell.lit = lit_value;
     }
     level.setCellVisible(walk[0], walk[1], lit_value);
     // walk
@@ -223,14 +224,15 @@ let raycast = (function () {
       // last_t = t_max[minidx];
       walk[minidx] += step[minidx];
       t_max[minidx] += t_delta[minidx];
-      let cur_lit = min(1, lit[walk[1]][walk[0]] + dvis);
+      cell = map[walk[1]][walk[0]];
+      let cur_lit = min(1, cell.lit + dvis);
       if (!NOISE_DEBUG) {
-        lit[walk[1]][walk[0]] = cur_lit;
+        cell.lit = cur_lit;
       }
       if (cur_lit > 0.1) { // && !visible[walk[1]][walk[0]]) {
         level.setCellVisible(walk[0], walk[1], cur_lit);
       }
-      ret = !canSeeThrough(map[walk[1]][walk[0]]);
+      ret = !canSeeThrough(cell.tile);
       dvis *= 0.9;
     } while (!ret);
     // v2copy(out_prevpos, walk);
@@ -253,6 +255,14 @@ let temp_color = vec4(0,0,0,1);
 const NOISE_FREQ_XY = 0.1;
 const NOISE_FREQ_Z = 0.2;
 
+class MapEntry {
+  constructor() {
+    this.tile = TILE_SOLID;
+    this.visible = false;
+    this.lit = 0;
+  }
+}
+
 class Level {
   constructor(seed, noise_3d, level_idx) {
     this.w = BOARD_W;
@@ -260,16 +270,10 @@ class Level {
     this.particles = false;
     this.did_game_over_detect = false;
     let map = this.map = [];
-    this.visible = [];
-    this.lit = [];
     for (let ii = 0; ii < this.h; ++ii) {
       map[ii] = [];
-      this.visible[ii] = [];
-      this.lit[ii] = [];
       for (let jj = 0; jj < this.w; ++jj) {
-        map[ii].push(TILE_SOLID);
-        this.visible[ii].push(false);
-        this.lit[ii].push(0);
+        map[ii].push(new MapEntry());
       }
     }
     let rand = this.rand = randCreate(seed);
@@ -297,11 +301,11 @@ class Level {
       let size = 8 + rand.range(64);
       let x = 1 + rand.range(BOARD_W - 2);
       let y = 1 + rand.range(BOARD_H - 2);
-      if (map[y][x] !== TILE_SOLID) {
+      if (map[y][x].tile !== TILE_SOLID) {
         continue;
       }
       let pts = [[x,y]];
-      map[y][x] = TILE_OPEN;
+      map[y][x].tile = TILE_OPEN;
       if (size > best_spawn) {
         this.spawn_pos = vec2(x + 0.5, y + 0.5);
         best_spawn = size;
@@ -315,10 +319,10 @@ class Level {
         if (yy < 1 || yy >= BOARD_H - 1 || xx < 1 || xx >= BOARD_W - 1) {
           continue;
         }
-        if (map[yy][xx] !== TILE_SOLID) {
+        if (map[yy][xx].tile !== TILE_SOLID) {
           continue;
         }
-        map[yy][xx] = TILE_OPEN;
+        map[yy][xx].tile = TILE_OPEN;
         pts.push([xx,yy]);
       }
     }
@@ -329,13 +333,13 @@ class Level {
     while (num_gem_sets) {
       let x = 1 + rand.range(BOARD_W - 2);
       let y = 1 + rand.range(BOARD_H - 2);
-      if (map[y][x] !== TILE_GEM_UNLIT) {
+      if (map[y][x].tile !== TILE_GEM_UNLIT) {
         if (rand.random()*rand.random() < noise_3d(x * NOISE_FREQ_XY, y * NOISE_FREQ_XY, level_idx * NOISE_FREQ_Z)) {
           continue;
         }
         --num_gems;
         --num_gem_sets;
-        map[y][x] = TILE_GEM_UNLIT;
+        map[y][x].tile = TILE_GEM_UNLIT;
         gem_sets.push({ x, y, pts: [[x,y]] });
       }
     }
@@ -348,11 +352,11 @@ class Level {
       if (yy < 1 || yy >= BOARD_H - 1 || xx < 1 || xx >= BOARD_W - 1) {
         continue;
       }
-      if (map[yy][xx] === TILE_GEM_UNLIT) {
+      if (map[yy][xx].tile === TILE_GEM_UNLIT) {
         continue;
       }
       --num_gems;
-      map[yy][xx] = TILE_GEM_UNLIT;
+      map[yy][xx].tile = TILE_GEM_UNLIT;
       set.pts.push([xx,yy]);
       if (delta.length > 2) {
         // xx = pt[0] + delta[2];
@@ -369,7 +373,7 @@ class Level {
     for (let ii = 0; ii < num_lava; ++ii) {
       let x = 1 + rand.range(BOARD_W - 2);
       let y = 1 + rand.range(BOARD_H - 2);
-      if (map[y][x] !== TILE_SOLID) {
+      if (map[y][x].tile !== TILE_SOLID) {
         if (!--aborts) {
           break;
         }
@@ -378,7 +382,7 @@ class Level {
       }
       let size = 32 + rand.range(64);
       let pts = [[x,y]];
-      map[y][x] = TILE_LAVA;
+      map[y][x].tile = TILE_LAVA;
       while (size) {
         --size;
         let pt = pts[rand.range(pts.length)];
@@ -388,10 +392,10 @@ class Level {
         if (yy < 1 || yy >= BOARD_H - 1 || xx < 1 || xx >= BOARD_W - 1) {
           continue;
         }
-        if (map[yy][xx] !== TILE_SOLID) {
+        if (map[yy][xx].tile !== TILE_SOLID) {
           continue;
         }
-        map[yy][xx] = TILE_LAVA;
+        map[yy][xx].tile = TILE_LAVA;
         pts.push([xx,yy]);
       }
     }
@@ -399,21 +403,21 @@ class Level {
     // Paint cracked
     for (let yy = 1; yy < BOARD_H - 1; ++yy) {
       for (let xx = 1; xx < BOARD_W - 1; ++xx) {
-        if (map[yy][xx] === TILE_SOLID) {
+        if (map[yy][xx].tile === TILE_SOLID) {
           let count = 0;
           for (let ii = 0; ii < DX.length; ++ii) {
             let x2 = xx + DX[ii];
             let y2 = yy + DY[ii];
-            if (map[y2][x2] === TILE_GEM_UNLIT) {
+            if (map[y2][x2].tile === TILE_GEM_UNLIT) {
               ++count;
             }
           }
           if (count === 1) {
-            map[yy][xx] = TILE_CRACKED_1;
+            map[yy][xx].tile = TILE_CRACKED_1;
           } else if (count === 2) {
-            map[yy][xx] = TILE_CRACKED_2;
+            map[yy][xx].tile = TILE_CRACKED_2;
           } else if (count === 3) {
-            map[yy][xx] = TILE_CRACKED_3;
+            map[yy][xx].tile = TILE_CRACKED_3;
           }
         }
       }
@@ -423,7 +427,7 @@ class Level {
     if (NOISE_DEBUG) {
       for (let yy = 1; yy < BOARD_H - 1; ++yy) {
         for (let xx = 1; xx < BOARD_W - 1; ++xx) {
-          this.lit[yy][xx] = noise_3d(xx * NOISE_FREQ_XY, yy * NOISE_FREQ_XY, level_idx * NOISE_FREQ_Z);
+          map[yy][xx].lit = noise_3d(xx * NOISE_FREQ_XY, yy * NOISE_FREQ_XY, level_idx * NOISE_FREQ_Z);
         }
       }
     }
@@ -437,7 +441,7 @@ class Level {
     for (let yy = 0; yy < BOARD_H; ++yy) {
       let row = map[yy];
       for (let xx = 0; xx < BOARD_W; ++xx) {
-        if (row[xx] === TILE_OPEN) {
+        if (row[xx].tile === TILE_OPEN) {
           if (!canWalkThrough(next_level.get(xx, yy))) {
             possible_spots_bad.push([xx,yy]);
           } else {
@@ -451,14 +455,14 @@ class Level {
       let idx = rand.range(possible_spots_good.length);
       let pos = possible_spots_good[idx];
       ridx(possible_spots_good, idx);
-      map[pos[1]][pos[0]] = TILE_BRIDGE;
+      map[pos[1]][pos[0]].tile = TILE_BRIDGE;
     }
     while (num_openings_bad && possible_spots_bad.length) {
       --num_openings_bad;
       let idx = rand.range(possible_spots_bad.length);
       let pos = possible_spots_bad[idx];
       ridx(possible_spots_bad, idx);
-      map[pos[1]][pos[0]] = TILE_BRIDGE;
+      map[pos[1]][pos[0]].tile = TILE_BRIDGE;
     }
   }
 
@@ -466,7 +470,7 @@ class Level {
     if (x < 0 || y < 0 || x >= this.w || y >= this.h) {
       return TILE_SOLID;
     }
-    return this.map[y][x];
+    return this.map[y][x].tile;
   }
 
   isSolid(x, y) {
@@ -474,25 +478,25 @@ class Level {
   }
 
   draw(z, color, next_level, noise_3d) {
+    let { map } = this;
     for (let yy = 0; yy < this.h; ++yy) {
-      let row = this.map[yy];
-      let vrow = this.visible[yy];
-      let lrow = this.lit[yy];
+      let row = map[yy];
       for (let xx = 0; xx < this.w; ++xx) {
-        if (vrow[xx] || debug_visible) {
-          let tile = row[xx];
-          if ((!debug_visible || vrow[xx]) && next_level && canSeeThroughToBelow(tile)) {
+        let cell = row[xx];
+        if (cell.visible || debug_visible) {
+          let { tile } = cell;
+          if ((!debug_visible || cell.visible) && next_level && canSeeThroughToBelow(tile)) {
             next_level.setVisibleFromAbove(xx, yy);
           }
           let cc = color;
-          let lvalue = lrow[xx];
+          let lvalue = cell.lit;
           if (tile === TILE_LAVA) {
             lvalue = 1;
             tile = TILE_LAVA + floor(randSimpleSpatial(xx, yy, 0) * engine.frame_timestamp * 0.001) % 3;
           }
           if (NOISE_DEBUG) {
-            cc = v3lerp(temp_color, lrow[xx], [0,0,0,1], [1,1,1,1]);
-          } else if (!vrow[xx]) {
+            cc = v3lerp(temp_color, cell.lit, [0,0,0,1], [1,1,1,1]);
+          } else if (!cell.visible) {
             cc = color_debug_visible;
           } else if (lvalue !== 1) {
             cc = v3lerp(temp_color, lvalue, color_unlit, color);
@@ -534,7 +538,7 @@ class Level {
     this.particles = true;
     // for (let yy = 0; yy < BOARD_H; ++yy) {
     //   for (let xx = 0; xx < BOARD_W; ++xx) {
-    //     if (this.map[yy][xx] === TILE_GEM && this.visible[yy][xx]) {
+    //     if (this.map[yy][xx].tile === TILE_GEM && this.map[yy][xx].visible) {
     //       particle(xx, yy, 'gem_found');,
     //     }
     //   }
@@ -542,21 +546,21 @@ class Level {
   }
 
   setCellVisible(x, y, lit_value) {
-    if (!this.visible[y][x]) {
-      this.visible[y][x] = true;
+    if (!this.map[y][x].visible) {
+      this.map[y][x].visible = true;
     }
-    if (this.map[y][x] === TILE_GEM_UNLIT && lit_value > 0.5) {
+    if (this.map[y][x].tile === TILE_GEM_UNLIT && lit_value > 0.5) {
       if (this.particles) {
         ui.playUISound('gem_found');
         particle(x, y, 'gem_found');
       }
-      this.map[y][x] = TILE_GEM;
+      this.map[y][x].tile = TILE_GEM;
       this.gems_found++;
     }
   }
 
   setVisibleFromAbove(x, y) {
-    this.lit[y][x] = 1;
+    this.map[y][x].lit = 1;
     for (let ii = 0; ii < DX_ABOVE.length; ++ii) {
       let xx = x + DX_ABOVE[ii];
       let yy = y + DY_ABOVE[ii];
@@ -568,13 +572,14 @@ class Level {
   }
 
   tickVisibility(x0, y0) {
-    let { lit } = this;
+    let { map } = this;
     let dvis = engine.frame_dt * 0.001;
     if (!NOISE_DEBUG) {
       for (let yy = 0; yy < BOARD_H; ++yy) {
-        let row = lit[yy];
+        let row = map[yy];
         for (let xx = 0; xx < BOARD_W; ++xx) {
-          row[xx] = max(0, row[xx] - dvis);
+          let cell = row[xx];
+          cell.lit = max(0, cell.lit - dvis);
         }
       }
     }
@@ -688,7 +693,7 @@ class GameState {
             if (xx <= 0 || yy <= 0 || xx >= BOARD_W - 1 || yy >= BOARD_H - 1) {
               continue;
             }
-            if (this.cur_level.map[yy][xx] === TILE_OPEN) {
+            if (this.cur_level.get(xx, yy) === TILE_OPEN) {
               highlightTile(xx, yy, [1,0.5,0,1]);
             }
           }
@@ -709,7 +714,7 @@ class GameState {
             if (xx <= 0 || yy <= 0 || xx >= BOARD_W - 1 || yy >= BOARD_H - 1) {
               break;
             }
-            if (!this.cur_level.visible[yy][xx] || !forceStopsDrill(this.cur_level.map[yy][xx])) {
+            if (!this.cur_level.map[yy][xx].visible || !forceStopsDrill(this.cur_level.get(xx, yy))) {
               let a = 1 - ii/5;
               highlightTile(xx, yy, [a,0.5*a,0,1]);
             } else {
@@ -767,8 +772,8 @@ class GameState {
     let message;
     let message_style = style_overlay;
     if (!show_lower && !this.active_drill) {
-      let cur_tile = this.cur_level.map[ay][ax];
-      let next_tile = this.next_level.map[ay][ax];
+      let cur_tile = this.cur_level.get(ax, ay);
+      let next_tile = this.next_level.get(ax, ay);
       if (!this.drills && !this.shovels) {
         if (cur_tile === TILE_BRIDGE && canWalkThrough(next_tile)) {
           dig_action = 'descend';
@@ -845,8 +850,8 @@ class GameState {
             if (xx <= 0 || yy <= 0 || xx >= BOARD_W - 1 || yy >= BOARD_H - 1) {
               continue;
             }
-            if (this.cur_level.map[yy][xx] === TILE_OPEN) {
-              this.cur_level.map[yy][xx] = TILE_BRIDGE;
+            if (this.cur_level.get(xx, yy) === TILE_OPEN) {
+              this.cur_level.map[yy][xx].tile = TILE_BRIDGE;
               particle(xx, yy, 'shovel');
               if (canWalkThrough(this.next_level.get(xx, yy))) {
                 good = true;
@@ -941,7 +946,7 @@ class GameState {
     let do_drill = this.cur_level.isSolid(xx, yy);
     if (do_drill) {
       particle(xx, yy, 'drill');
-      this.cur_level.map[yy][xx] = TILE_OPEN;
+      this.cur_level.map[yy][xx].tile = TILE_OPEN;
     }
     pos[0] += DX[dir];
     pos[1] += DY[dir];
@@ -962,6 +967,8 @@ class GameState {
     }
     if (do_drill) {
       ui.playUISound('drill_block');
+    } else {
+      ui.playUISound('drill_skip');
     }
   }
 
@@ -1394,6 +1401,7 @@ export function main() {
     gem_found: ['pickup1b', 'pickup1b', 'pickup1b', 'pickup1b', 'pickup2b', 'pickup3b', 'pickup4b', 'pickup5b'],
     drill_block: ['dig1', 'dig2'],
     drill_stop: ['dig_stop'],
+    drill_skip: ['dig_skip'],
     shovel1: ['hole1'],
     shovel2: ['hole2'],
     descend: 'descend',
