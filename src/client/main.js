@@ -1,6 +1,6 @@
 /*eslint global-require:off*/
 const local_storage = require('./glov/local_storage.js');
-local_storage.setStoragePrefix('glovjs-playground'); // Before requiring anything else that might load from this
+local_storage.setStoragePrefix('ld48'); // Before requiring anything else that might load from this
 
 const animation = require('./glov/animation.js');
 const assert = require('assert');
@@ -18,13 +18,15 @@ const particle_data = require('./particle_data.js');
 const pico8 = require('./glov/pico8.js');
 const { mashString, randCreate } = require('./glov/rand_alea.js');
 const { randSimpleSpatial } = require('./glov/rand_fast.js');
+const settings = require('./glov/settings.js');
+const { soundPlayMusic } = require('./glov/sound.js');
 const sprites = require('./glov/sprites.js');
 const sprite_animation = require('./glov/sprite_animation.js');
 const transition = require('./glov/transition.js');
 const { clamp, nop, ridx } = require('../common/util.js');
 const {
   vec2, v2add, v2addScale, v2floor, v2lengthSq, v2normalize, v2sub, v2scale,
-  v3lerp, vec4, v4set,
+  v3lerp, vec4, v4copy,
 } = require('./glov/vmath.js');
 
 window.Z = window.Z || {};
@@ -159,7 +161,23 @@ const style_overlay = glov_font.style(null, {
 const style_hint = glov_font.style(style_overlay, {
   color: 0x808080ff,
 });
+const title_style = glov_font.style(null, {
+  color: pico8.font_colors[12],
+  outline_width: 2,
+  outline_color: pico8.font_colors[1],
+  glow_xoffs: 2,
+  glow_yoffs: 2,
+  glow_inner: -2.5,
+  glow_outer: 5,
+  glow_color: pico8.font_colors[4],
+});
+let subtitle_style = null;
+let subtitle_style2 = glov_font.style(subtitle_style, {
+  color: pico8.font_colors[5],
+});
+
 let font;
+let title_font;
 
 let raycast = (function () {
   let walk = new Int32Array(2);
@@ -1173,9 +1191,13 @@ function hudShared() {
 
 function play(dt) {
   gl.clearColor(0, 0, 0, 1);
-  ui.print(style_overlay, 4, 4, Z.UI, '[shift] - view level below');
-  ui.print(style_overlay, 4, 4+ui.font_height, Z.UI, '[WASD] - move');
-  ui.print(style_overlay, 4, 4+ui.font_height*2, Z.UI, '[Z] - zoom out');
+
+  if (state.pos[0] > 4 || state.pos[1] > 3) {
+    ui.print(style_overlay, 4, 4, Z.UI, '[shift] - view level below');
+    ui.print(style_overlay, 4, 4+ui.font_height, Z.UI, '[WASD] - move');
+    ui.print(style_overlay, 4, 4+ui.font_height*2, Z.UI, '[Z] - zoom out');
+    ui.print(style_overlay, 4, 4+ui.font_height*3, Z.UI, '[esc] - menu');
+  }
 
   hudShared();
 
@@ -1201,6 +1223,36 @@ function play(dt) {
     state.cur_level.activateParticles();
   }
   state.setMainCamera(); // for particles
+  if (input.keyDownEdge(KEYS.ESC)) {
+    // eslint-disable-next-line no-use-before-define
+    engine.setState(titleInit);
+    transition.queue(Z.TRANSITION_FINAL, transition.splitScreen(500, 4, false));
+  }
+}
+
+let pumping = false;
+let pump_timeout;
+function pumpMusicCancel() {
+  if (pumping) {
+    clearTimeout(pump_timeout);
+    pumping = false;
+  }
+}
+function pumpMusic() {
+  if (pumping || !settings.music) {
+    return;
+  }
+  pumping = true;
+  // soundPlayMusic('msg_out');
+  // setTimeout(function () {
+  //   pumping = false;
+  //   pumpMusic();
+  // }, 10*1000);
+  soundPlayMusic('music1');
+  pump_timeout = setTimeout(function () {
+    pumping = false;
+    pumpMusic();
+  }, 6*60*1000);
 }
 
 function playInit(dt) {
@@ -1216,6 +1268,100 @@ function descend(dt) {
 function descendInit(dt) {
   engine.setState(descend);
   descend(dt);
+}
+
+function killFX() {
+  engine.glov_particles.killAll();
+}
+
+let title_state;
+let title_seq;
+function title(dt) {
+  gl.clearColor(0, 0, 0, 1);
+  title_seq.update(dt);
+  let y = 20;
+  title_font.drawSizedAligned(glov_font.styleAlpha(title_style, title_state.fade0),
+    0, y, Z.UI, 32, font.ALIGN.HCENTER, game_width, 0,
+    'Dwarven Surveyor');
+
+  y += 32 + 5;
+
+  font.drawSizedAligned(glov_font.styleAlpha(subtitle_style2, title_state.fade2),
+    0, y, Z.UI, ui.font_height, font.ALIGN.HCENTER, game_width, 0,
+    'by Jimb Esser in 48 hours for Ludum Dare 48');
+
+  y += ui.font_height + 16;
+
+  font.drawSizedAligned(glov_font.styleAlpha(subtitle_style, title_state.fade1),
+    0, y, Z.UI, ui.font_height, font.ALIGN.HCENTER, game_width, 0,
+    'Use your Drills to find Gems on the current level');
+  y += ui.font_height + 4;
+
+  font.drawSizedAligned(glov_font.styleAlpha(subtitle_style, title_state.fade1),
+    0, y, Z.UI, ui.font_height, font.ALIGN.HCENTER, game_width, 0,
+    'Use your Shovels to scout out the next level');
+  y += ui.font_height + 4;
+
+  y += 16;
+  if (title_state.fade3) {
+    if (ui.buttonText({
+      x: floor(game_width/2 - ui.button_width/2),
+      y,
+      text: state ? 'Resume' : 'Play'
+    }) || input.keyDownEdge(KEYS.ESC)) {
+      transition.queue(Z.TRANSITION_FINAL, transition.splitScreen(500, 4, false));
+      engine.setState(state ? play : playInit);
+    }
+
+    let snd_w = 64;
+    if (ui.button({
+      text: `Music: ${settings.music ? '☏' : '☎'}`,
+      x: game_width - snd_w - 8,
+      y: game_height - ui.button_height - 8,
+      w: snd_w,
+    })) {
+      settings.set('music', 1 - settings.music);
+      if (settings.music) {
+        pumpMusic();
+      } else {
+        pumpMusicCancel();
+      }
+    }
+    if (ui.button({
+      text: `Sound FX: ${settings.sound ? '☏' : '☎'}`,
+      x: game_width - (snd_w + 8) * 2,
+      y: game_height - ui.button_height - 8,
+      w: snd_w,
+    })) {
+      settings.set('sound', 1 - settings.sound);
+    }
+  }
+}
+
+let first_time = true;
+function titleInit(dt) {
+  killFX();
+  title_state = {
+    fade0: 0,
+    fade1: 0,
+    fade2: 0,
+    fade3: 0,
+    fade4: 0,
+  };
+  title_seq = animation.create();
+  let t = title_seq.add(0, 300, (v) => (title_state.fade0 = v));
+  t = title_seq.add(t, 500, nop);
+  t = title_seq.add(t, 300, (v) => (title_state.fade1 = v));
+  t = title_seq.add(t, 500, nop);
+  t = title_seq.add(t, 300, (v) => (title_state.fade2 = v));
+  t = title_seq.add(t, 500, nop);
+  title_seq.add(t, 300, (v) => (title_state.fade3 = v));
+  if (!first_time || engine.DEBUG) {
+    title_seq.update(30000);
+  }
+  first_time = false;
+  engine.setState(title);
+  title(dt);
 }
 
 
@@ -1258,7 +1404,8 @@ export function main() {
     return;
   }
   font = engine.font;
-  v4set(engine.border_color, 0.4, 0.4, 0.4, 1);
+  title_font = ui.title_font;
+  v4copy(engine.border_color, pico8.colors[5]);
 
   ui.scaleSizes(13 / 32);
   ui.setFontHeight(8);
@@ -1334,5 +1481,6 @@ export function main() {
     origin: vec2(0, 0),
   });
 
-  engine.setState(playInit);
+  pumpMusic();
+  engine.setState(engine.DEBUG ? playInit : titleInit);
 }
