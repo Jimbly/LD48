@@ -779,7 +779,7 @@ class GameState {
           highlightTile(ax, ay, [0.1,0.1,0.1,1]);
           message_style = style_hint;
         } else {
-          message = 'A hole was dug here, but it is not clear below.';
+          message = `A hole was dug here, but it is not ${next_tile === TILE_LAVA ? 'safe' : 'clear'} below.`;
           highlightTile(ax, ay, [0.1,0.1,0.1,1]);
           message_style = style_hint;
         }

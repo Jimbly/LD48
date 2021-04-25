@@ -3,8 +3,17 @@ Untitled - LD48 - Deeper and deeper
 
 Ludum Dare 45 Entry by Jimbly
 
+### TODO
+
 tutorial
 sounds / music
+main menu / restart/resume / start / sound / music toggles
+high scores
+better character
+better world tiles
+
+
+### Original brainstorming notes
 
 Roguelike miner - Dwarven Scout/Surveyor?
 * Goal: extract as much ore from a level as possible while scouting the next level and choosing a place to dig
