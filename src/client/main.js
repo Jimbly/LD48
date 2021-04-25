@@ -38,53 +38,56 @@ Z.PARTICLES = 20;
 Z.UI_TEST = 200;
 
 
-// const NOISE_FREQ_XY = 0.1;
-// const NOISE_FREQ_Z = 0.2;
-// const level_def = {
-//   w: 48,
-//   h: 32,
-//   num_rooms: 15,
-//   num_openings: 20,
-//   gems_per_floor: 100,
-//   num_gem_sets: 20,
-//   room_min_size: 8,
-//   room_max_size: 64,
-//   lava_min_size: 32,
-//   lava_max_size: 96,
-//   shovels_init: 3,
-//   drills_init: 5,
-//   shovels_add: 5,
-//   drills_add: 5,
-// };
 const seedmod = 'e';
 const NOISE_FREQ_XY = 0.1;
 const NOISE_FREQ_Z = 0.2;
-const level_def = {
-  w: 48/2,
-  h: 32/2,
-  num_rooms: 6,
-  num_openings: 2,
-  gems_per_floor: 20,
-  gems_per_floor_min: 2,
-  num_gem_sets: 4,
-  room_min_size: 6,
-  room_max_size: 28,
-  lava_min_size: 16,
-  lava_max_size: 32,
-  shovels_init: 3,
-  drills_init: 5,
-  shovels_add: 2,
-  drills_add: 3,
-  holes: 12,
-  max_levels: 10,
+const level_defs = {
+  endless: {
+    w: 48,
+    h: 32,
+    num_rooms: 15,
+    num_openings: 10,
+    gems_per_floor: 100,
+    gems_per_floor_min: 10,
+    num_gem_sets: 20,
+    room_min_size: 8,
+    room_max_size: 64,
+    lava_min_size: 32,
+    lava_max_size: 96,
+    shovels_init: 3,
+    drills_init: 5,
+    shovels_add: 6,
+    drills_add: 5,
+    random_seed: true,
+  },
+  score_attack: {
+    w: 48/2,
+    h: 32/2,
+    num_rooms: 6,
+    num_openings: 2,
+    gems_per_floor: 20,
+    gems_per_floor_min: 2,
+    num_gem_sets: 4,
+    room_min_size: 6,
+    room_max_size: 28,
+    lava_min_size: 16,
+    lava_max_size: 32,
+    shovels_init: 3,
+    drills_init: 5,
+    shovels_add: 2,
+    drills_add: 3,
+    holes: 12,
+    max_levels: 10,
+    random_seed: false,
+  },
 };
+let level_def = level_defs.score_attack;
 const REQUIRE_NO_TOOLS = false;
 
 let NOISE_DEBUG = false;
 let debug_zoom = false;
 let debug_visible = false;
 let debug_freecam = false;
-let random_seed = false;
 
 
 // Virtual viewport for our game logic
@@ -830,11 +833,13 @@ class GameState {
     this.gems_total = 0;
     gems_found_at = 0;
     this.level = 1;
-    this.noise_3d = createNoise3D(random_seed ? `3d.${random()}` : `3d${seedmod}`);
-    this.cur_level = new Level(mashString(random_seed ? `1.${random()}` : `1${seedmod}`), this.noise_3d, this.level);
+    this.noise_3d = createNoise3D(level_def.random_seed ? `3d.${random()}` : `3d${seedmod}`);
+    this.cur_level = new Level(mashString(level_def.random_seed ? `1.${random()}` : `1${seedmod}`),
+      this.noise_3d, this.level);
     this.cur_level.activateParticles();
     this.gems_total += this.cur_level.gems_total;
-    this.next_level = new Level(mashString(random_seed ? `2.${random()}` : `2${seedmod}`), this.noise_3d, this.level+1);
+    this.next_level = new Level(mashString(level_def.random_seed ? `2.${random()}` : `2${seedmod}`),
+      this.noise_3d, this.level+1);
     this.pos = this.cur_level.spawn_pos.slice(0);
     this.cur_level.addOpenings(this.next_level, this.pos);
     this.run_time = 0;
@@ -1146,7 +1151,7 @@ class GameState {
           this.cur_level = this.next_level;
           this.cur_level.activateParticles();
           this.gems_total += this.cur_level.gems_total;
-          this.next_level = new Level(mashString(random_seed ? `${random()}` : `${this.level+1}${seedmod}`),
+          this.next_level = new Level(mashString(level_def.random_seed ? `${random()}` : `${this.level+1}${seedmod}`),
             this.noise_3d, this.level + 1);
           this.pos[0] = ax + 0.5;
           this.pos[1] = ay + 0.5;
@@ -1409,8 +1414,8 @@ function hudShared() {
     });
     font.drawSizedAligned(style_overlay, game_width - 4 - icon_size, y, Z.UI, ui.font_height * 2,
       font.ALIGN.HRIGHT, 0, 0,
-      //`Score: ${state.gems_found}`);
-      `Total: ${state.gems_found}/${state.gems_total}`);
+      level_def.max_levels ? `Total: ${state.gems_found}/${state.gems_total}` :
+        `Score: ${state.gems_found}`);
     y += icon_size + 4;
   }
   sprite_tiles_ui.draw({
@@ -1494,14 +1499,16 @@ function play(dt) {
     ui.print(style_overlay, 4, 4, Z.UI, '[shift] - view level below');
     ui.print(style_overlay, 4, 4+ui.font_height, Z.UI, '[WASD] - move');
     ui.print(style_overlay, 4, 4+ui.font_height*2, Z.UI, '[esc] - menu');
-    //ui.print(style_overlay, 4, 4+ui.font_height*3, Z.UI, '[Z] - zoom out');
+    if (level_def.w > 24) {
+      ui.print(style_overlay, 4, 4+ui.font_height*3, Z.UI, '[Z] - zoom out');
+    }
   }
 
   hudShared();
 
   if (engine.DEBUG) {
     if (input.keyDownEdge(KEYS.R)) {
-      random_seed = true;
+      level_def.random_seed = true;
       state = new GameState();
     }
     if (input.keyDownEdge(KEYS.V)) {
@@ -1726,24 +1733,45 @@ function title(dt) {
 
   y = game_height - ui.button_height * 2 - 12;
   if (title_state.fade5) {
-    if (ui.buttonText({
-      x: floor(game_width/2 - ui.button_width/2),
-      y,
-      text: state ? 'Resume' : 'Play'
-    }) || input.keyDownEdge(KEYS.ESC)) {
-      transition.queue(Z.TRANSITION_FINAL, transition.splitScreen(500, 4, false));
-      engine.setState(state ? play : playInit);
-    }
-    y += ui.button_height + 4;
+    let bx1 = (game_width - ui.button_width * 3 - 4 * 2) / 2;
+    let bx2 = bx1 + ui.button_width + 4;
+    let bx3 = bx2 + ui.button_width + 4;
     if (state) {
       if (ui.buttonText({
-        x: floor(game_width/2 - ui.button_width/2),
-        y,
-        text: 'Restart'
+        x: bx1, y, text: 'Resume'
       }) || input.keyDownEdge(KEYS.ESC)) {
         transition.queue(Z.TRANSITION_FINAL, transition.splitScreen(500, 4, false));
+        engine.setState(play);
+      }
+      if (ui.buttonText({
+        x: bx2, y, text: 'Restart'
+      })) {
+        state = null;
+      }
+    } else {
+      if (ui.buttonText({
+        x: bx1, y,
+        text: 'Play'
+      }) || input.keyDownEdge(KEYS.ESC)) {
+        transition.queue(Z.TRANSITION_FINAL, transition.splitScreen(500, 4, false));
+        level_def = level_defs.score_attack;
         engine.setState(playInit);
       }
+      if (ui.buttonText({
+        x: bx2, y,
+        text: 'Endless Mode'
+      })) {
+        transition.queue(Z.TRANSITION_FINAL, transition.splitScreen(500, 4, false));
+        level_def = level_defs.endless;
+        engine.setState(playInit);
+      }
+    }
+    if (ui.buttonText({
+      x: bx3, y,
+      text: 'High Scores'
+    })) {
+      transition.queue(Z.TRANSITION_FINAL, transition.splitScreen(500, 4, false));
+      engine.setState(highScoreInit);
     }
 
     let snd_w = 64;
@@ -1930,5 +1958,5 @@ export function main() {
   });
 
   pumpMusic();
-  engine.setState(engine.DEBUG ? playInit : titleInit);
+  engine.setState(engine.DEBUG && false ? playInit : titleInit);
 }
