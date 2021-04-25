@@ -135,6 +135,8 @@ const DY = [0, -1, 0, 1];
 
 const DX_ABOVE = [-1, 0, 1, -1, 0, 1, -1, 0, 1, -2, 2, 0, 0];
 const DY_ABOVE = [-1, -1, -1, 0, 0, 0, 1, 1, 1, 0, 0, -2, 2];
+const DX_ABOVE_PIT = [0, -1, 0, 1, 0];
+const DY_ABOVE_PIT = [-1, 0, 0, 0, 1];
 
 const DIG_DX = [-1, 0, 1, 0, 0];
 const DIG_DY = [0, 0, 0, -1, 1];
@@ -614,7 +616,7 @@ class Level {
         if (cell.visible || debug_visible) {
           let { tile } = cell;
           if ((!debug_visible || cell.visible) && next_level && canSeeThroughToBelow(tile)) {
-            next_level.setVisibleFromAbove(xx, yy);
+            next_level.setVisibleFromAbove(xx, yy, tile);
           }
           let cc = color;
           let lvalue = cell.lit;
@@ -708,11 +710,13 @@ class Level {
     }
   }
 
-  setVisibleFromAbove(x, y) {
+  setVisibleFromAbove(x, y, above_tile) {
     this.map[y][x].lit = 1;
-    for (let ii = 0; ii < DX_ABOVE.length; ++ii) {
-      let xx = x + DX_ABOVE[ii];
-      let yy = y + DY_ABOVE[ii];
+    let dx_above = above_tile === TILE_PIT ? DX_ABOVE_PIT : DX_ABOVE;
+    let dy_above = above_tile === TILE_PIT ? DY_ABOVE_PIT : DY_ABOVE;
+    for (let ii = 0; ii < dx_above.length; ++ii) {
+      let xx = x + dx_above[ii];
+      let yy = y + dy_above[ii];
       if (xx < 0 || xx >= BOARD_W || yy < 0 || yy >= BOARD_H) {
         continue;
       }
