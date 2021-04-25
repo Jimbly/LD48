@@ -5,12 +5,12 @@ Ludum Dare 45 Entry by Jimbly
 
 ### TODO
 
-?levels are just 2 floors - more shovels, less drills, not replenished
-  maybe more interesting high score, has theoretical, if annoying, optimal?
-    less good on the theme
-  separate endless mode?
 try significantly smaller floors - can we do screen size and still get parallax?
   would do fewer tools per floor, and would need the floors to be more puzzle-y
+only claim gems that you can actually walk to and see, not ones you see across the lava - do can walk to filter in raycast?
+sound when getting to 20/20
+change color when getting to 20/20
+excess drills/shovels turn into points?
 try infinite drills, scored to get all gems (probably also want smaller floors), limited shovels
 some indication of how well you're doing on current level
   make gem count snap big and shrink whenever it increments
