@@ -18,6 +18,7 @@ const particle_data = require('./particle_data.js');
 const pico8 = require('./glov/pico8.js');
 const { mashString, randCreate } = require('./glov/rand_alea.js');
 const { randSimpleSpatial } = require('./glov/rand_fast.js');
+const score_system = require('./glov/score.js');
 const settings = require('./glov/settings.js');
 const { soundPlayMusic } = require('./glov/sound.js');
 const sprites = require('./glov/sprites.js');
@@ -43,6 +44,7 @@ const NOISE_FREQ_XY = 0.1;
 const NOISE_FREQ_Z = 0.2;
 const level_defs = {
   endless: {
+    score_idx: 1,
     w: 48,
     h: 32,
     num_rooms: 15,
@@ -61,6 +63,7 @@ const level_defs = {
     random_seed: true,
   },
   score_attack: {
+    score_idx: 0,
     w: 48/2,
     h: 32/2,
     num_rooms: 6,
@@ -742,6 +745,8 @@ class Level {
       this.map[y][x].tile = TILE_GEM;
       this.gems_found++;
       state.gems_found++;
+      state.updateHighScore();
+
       gems_found_at = engine.frame_timestamp;
       if (this.gems_found === this.gems_total) {
         ui.playUISound('level_complete');
@@ -853,6 +858,12 @@ class GameState {
     this.h = level_def.h;
     this.w_px = this.w * TILE_W;
     this.h_px = this.h * TILE_W;
+  }
+
+  updateHighScore() {
+    score_system.setScore(level_def.score_idx,
+      { level: state.level, gems: this.gems_found, tools: this.shovels + this.drills }
+    );
   }
 
   setMainCamera() {
@@ -1141,6 +1152,7 @@ class GameState {
         y: game_height - ui.button_height,
       }) || input.keyDownEdge(KEYS.SPACE) || input.keyDownEdge(KEYS.E)) {
         this.level++;
+        this.updateHighScore();
         if (this.level > level_def.max_levels || engine.DEBUG && input.keyDown(KEYS.L)) {
           transition.queue(Z.TRANSITION_FINAL, transition.fade(1000));
           // eslint-disable-next-line no-use-before-define
@@ -1582,6 +1594,7 @@ function descendInit(dt) {
   descend(dt);
 }
 
+let need_player_name_update;
 function gameOver(dt) {
   let y = 10;
   title_font.drawSizedAligned(title_style,
@@ -1629,8 +1642,15 @@ function gameOver(dt) {
     engine.setState(titleInit);
   }
   y += ui.button_height + 4;
+
+  need_player_name_update = false;
+  // eslint-disable-next-line no-use-before-define
+  showHighScores(game_width / 4, y, level_def.score_idx);
+  // eslint-disable-next-line no-use-before-define
+  doPlayerNameUpdate();
 }
 function gameOverInit(dt) {
+  score_system.updateHighScores();
   engine.setState(gameOver);
   gameOver(dt);
 }
@@ -1771,6 +1791,7 @@ function title(dt) {
       text: 'High Scores'
     })) {
       transition.queue(Z.TRANSITION_FINAL, transition.splitScreen(500, 4, false));
+      // eslint-disable-next-line no-use-before-define
       engine.setState(highScoreInit);
     }
 
@@ -1828,6 +1849,137 @@ function titleInit(dt) {
   first_time = false;
   engine.setState(title);
   title(dt);
+}
+
+let levels = [
+  {
+    name: 'score_attack',
+    display_name: 'Score Attack',
+  }, {
+    name: 'endless',
+    display_name: 'Endless',
+  },
+];
+
+let scores_edit_box;
+function showHighScores(x, y, eff_level_idx) {
+  let width = game_width * 0.5;
+  // let y0 = y;
+  let z = Z.UI - 10;
+  let size = 8;
+  let pad = size;
+  title_font.drawSizedAligned(title_style, x, y, z, size * 2, glov_font.ALIGN.HCENTERFIT, width, 0,
+    levels[eff_level_idx].display_name);
+  y += size * 2 + 2;
+  let level_id = levels[eff_level_idx].name;
+  let scores = score_system.high_scores[level_id];
+  let score_style = glov_font.styleColored(null, pico8.font_colors[7]);
+  if (!scores) {
+    font.drawSizedAligned(score_style, x, y, z, size, glov_font.ALIGN.HCENTERFIT, width, 0,
+      'Loading...');
+    return;
+  }
+  let widths = [10, 60, 24, 24, 24];
+  let widths_total = 0;
+  for (let ii = 0; ii < widths.length; ++ii) {
+    widths_total += widths[ii];
+  }
+  let set_pad = size / 2;
+  for (let ii = 0; ii < widths.length; ++ii) {
+    widths[ii] *= (width - set_pad * (widths.length - 1)) / widths_total;
+  }
+  let align = [
+    glov_font.ALIGN.HFIT | glov_font.ALIGN.HRIGHT,
+    glov_font.ALIGN.HFIT,
+    glov_font.ALIGN.HFIT | glov_font.ALIGN.HCENTER,
+    glov_font.ALIGN.HFIT | glov_font.ALIGN.HCENTER,
+    glov_font.ALIGN.HFIT | glov_font.ALIGN.HCENTER,
+  ];
+  function drawSet(arr, style, header) {
+    let xx = x;
+    for (let ii = 0; ii < arr.length; ++ii) {
+      let str = String(arr[ii]);
+      font.drawSizedAligned(style, xx, y, z, size, align[ii], widths[ii], 0, str);
+      xx += widths[ii] + set_pad;
+    }
+    y += size;
+  }
+  drawSet(['', 'Name', 'Gems', 'Level', 'Tools'], glov_font.styleColored(null, pico8.font_colors[6]), true);
+  y += 4;
+  let found_me = false;
+  let max_y = game_height - 16 - size * 2;
+  for (let ii = 0; ii < scores.length; ++ii) {
+    let s = scores[ii];
+    let style = score_style;
+    let drawme = false;
+    if (s.name === score_system.player_name) {
+      style = glov_font.styleColored(null, pico8.font_colors[11]);
+      found_me = true;
+      drawme = true;
+    }
+    if (y < max_y || drawme) {
+      drawSet([
+        `#${ii+1}`, score_system.formatName(s), s.score.gems,
+        s.score.level, s.score.tools
+      ], style);
+    }
+  }
+  y += set_pad;
+  if (found_me && score_system.player_name.indexOf('Anonymous') === 0) {
+    need_player_name_update = true;
+  }
+
+  y += pad;
+}
+function doPlayerNameUpdate() {
+  if (need_player_name_update) {
+    let size = 8;
+    let y = game_height - 16;
+    if (!scores_edit_box) {
+      scores_edit_box = ui.createEditBox({
+        z: Z.UI,
+        w: game_width / 4,
+      });
+      scores_edit_box.setText(score_system.player_name);
+    }
+
+    let x = game_width / 4;
+    if (scores_edit_box.run({
+      x, y,
+    }) === scores_edit_box.SUBMIT || ui.buttonText({
+      x: x + scores_edit_box.w + size,
+      y: y - size * 0.25,
+      w: size * 13,
+      h: ui.button_height,
+      text: 'Update Player Name'
+    })) {
+      // scores_edit_box.text
+      if (scores_edit_box.text) {
+        score_system.updatePlayerName(scores_edit_box.text);
+      }
+    }
+  }
+}
+function highScore(dt) {
+  let y = 4;
+  let size = 8;
+  if (ui.buttonText({
+    x: 4, y, text: 'Back',
+  }) || input.keyDownEdge(KEYS.ESC)) {
+    engine.setState(titleInit);
+  }
+  font.drawSizedAligned(null, 0, y, Z.UI, size * 2, glov_font.ALIGN.HCENTERFIT, game_width, 0, 'HIGH SCORES');
+  y += size * 2 + 2;
+  need_player_name_update = false;
+  showHighScores(0, y, 0);
+  showHighScores(game_width / 2, y, 1);
+  ui.drawRect(game_width/2, y, game_width - 2, game_height - 2 - 16 - 2, Z.UI - 10, pico8.colors[1]);
+  doPlayerNameUpdate();
+}
+function highScoreInit(dt) {
+  gl.clearColor(0, 0, 0, 1);
+  engine.setState(highScore);
+  highScore(dt);
 }
 
 
@@ -1957,6 +2109,25 @@ export function main() {
     origin: vec2(0, 0),
   });
 
+  function encodeScore(score) {
+    assert(score.level >= 1 && score.gems >= 0 && score.tools >= 0);
+    return score.gems * 10000 * 10000 +
+      score.level * 10000 +
+      score.tools;
+  }
+
+  function parseScore(value) {
+    let gems = floor(value / (10000 * 10000));
+    value -= gems * (10000 * 10000);
+    let level = floor(value / (10000));
+    value -= level * 10000;
+    let tools = value;
+    return { gems, level, tools };
+  }
+
+  score_system.init(encodeScore, parseScore, levels, 'LD48');
+  score_system.updateHighScores();
+
   pumpMusic();
-  engine.setState(engine.DEBUG && false ? playInit : titleInit);
+  engine.setState(engine.DEBUG ? playInit : titleInit);
 }

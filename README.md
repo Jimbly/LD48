@@ -8,9 +8,10 @@ Ludum Dare 45 Entry by Jimbly
 drill and shovel pickups?
 
 game ended with me having a bunch of tools, but nothing to do with them - ensure a traversible path exists between all gems?
+  at least need to detect that
 
 high scores
-tutorial?
+
 better world tiles - try completely different visuals?
 better character
 balance / fun ?
