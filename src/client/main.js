@@ -39,7 +39,7 @@ Z.PARTICLES = 20;
 Z.UI_TEST = 200;
 
 
-const seedmod = 'e';
+const seedmod = 'c';//'e';
 const NOISE_FREQ_XY = 0.1;
 const NOISE_FREQ_Z = 0.2;
 const level_defs = {
@@ -313,7 +313,7 @@ let raycast = (function () {
 
 
 function particle(xx, yy, key) {
-  engine.glov_particles.createSystem(particle_data.defs[key],
+  return engine.glov_particles.createSystem(particle_data.defs[key],
     [(xx + 0.5) * TILE_W, (yy + 0.5) * TILE_W, Z.PARTICLES]
   );
 }
@@ -325,6 +325,7 @@ class MapEntry {
   constructor(x, y) {
     this.tile = TILE_SOLID;
     this.lava_freq = 1;
+    this.lava_part = null;
     this.visible = false;
     this.is_ore_vein = false;
     this.is_ore_vein_edge = false;
@@ -690,6 +691,13 @@ class Level {
           if (tile === TILE_LAVA) {
             lvalue = 1;
             tile = TILE_LAVA + floor(cell.lava_freq * engine.frame_timestamp) % 3;
+            if (next_level && cell.visible &&
+              (!cell.lava_part || cell.lava_part.age > cell.lava_part.system_lifespan)
+            ) {
+              if (random() < 0.01) {
+                cell.lava_part = particle(xx, yy, 'lava');
+              }
+            }
           }
           if (NOISE_DEBUG) {
             cc = v3lerp(temp_color, cell.lit, [0,0,0,1], [1,1,1,1]);

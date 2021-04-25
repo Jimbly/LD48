@@ -5,8 +5,7 @@ Ludum Dare 45 Entry by Jimbly
 
 ### TODO
 
-better world tiles - try completely different visuals?
-better character
+better world tiles
 balance / fun  pass on each mode
 particles/glow on lava
 maybe show outline of walkable above area while viewing lower level

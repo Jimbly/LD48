@@ -169,3 +169,44 @@ defs.drill_stop = {
   },
   system_lifespan: 2500,
 };
+
+defs.lava = {
+  particles: {
+    part0: {
+      blend: 'alpha',
+      texture: 'particles/circle8',
+      color: pico8.colors[8], // multiplied by animation track, default 1,1,1,1, can be omitted
+      color_track: [
+        // just values, NOT random range
+        { t: 0.0, v: [1,1,1,0] },
+        { t: 0.05, v: [1,1,1,1] },
+        { t: 0.1, v: [1,1,1,1] },
+        { t: 0.3, v: [1,1,1,0.5] },
+        { t: 1.0, v: [0,1,1,0] },
+      ],
+      size: [[32,4], [32,4]], // multiplied by animation track
+      size_track: [
+        // just values, NOT random range
+        { t: 0.0, v: [0.25,0.25] },
+        { t: 1.0, v: [1,1] },
+      ],
+      accel: [0,0,0],
+      lifespan: [1500,0], // milliseconds
+      kill_time_accel: 5,
+    },
+  },
+  emitters: {
+    part0: {
+      particle: 'part0',
+      // Random ranges affect each emitted particle:
+      pos: [[-8,16], [-8,16], 0],
+      vel: [0,0,0],
+      emit_rate: [4,0], // emissions per second
+      // Random ranges only calculated upon instantiation:
+      emit_time: [0,1000],
+      emit_initial: 1,
+      max_parts: Infinity,
+    },
+  },
+  system_lifespan: 2500,
+};
