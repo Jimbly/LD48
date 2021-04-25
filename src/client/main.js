@@ -27,7 +27,7 @@ const transition = require('./glov/transition.js');
 const { clamp, easeOut, nop, ridx } = require('../common/util.js');
 const {
   vec2, v2add, v2addScale, v2floor, v2lengthSq, v2normalize, v2sub, v2scale,
-  v3lerp, vec4, v4copy,
+  v3copy, v3lerp, vec4, v4copy,
 } = require('./glov/vmath.js');
 
 window.Z = window.Z || {};
@@ -335,6 +335,26 @@ class MapEntry {
 }
 const dummy_cell = new MapEntry();
 let gems_found_at = 0;
+
+let temp_color2 = vec4();
+function drawTwinkle(param) {
+  let frame = param.frame;
+  let orig_a = param.color[3];
+  let a = engine.frame_timestamp * 0.002 % 9;
+  v3copy(temp_color2, param.color);
+  param.color = temp_color2;
+
+  let ipart = floor(a);
+  let fpart = (a - ipart);
+  temp_color2[3] = fpart * orig_a;
+  param.frame = (frame + ipart) % 9;
+  sprite_twinkle.draw(param);
+
+  temp_color2[3] = (1 - fpart) * orig_a;
+  param.frame = (frame + ipart + 8) % 9;
+  sprite_twinkle.draw(param);
+}
+
 
 class Level {
   constructor(seed, noise_3d, level_idx) {
@@ -693,18 +713,11 @@ class Level {
             tile = TILE_BRIDGE_OVER_STONE;
           }
           if (!canSeeThrough(tile) && cell.is_ore_vein) {
-            sprite_twinkle.draw({
+            drawTwinkle({
               x: xx * TILE_W,
               y: yy * TILE_W,
               z: zz + 0.01,
               frame: cell.ore_frame,
-              color: cc,
-            });
-            sprite_twinkle.draw({
-              x: xx * TILE_W,
-              y: yy * TILE_W,
-              z: zz + 0.01,
-              frame: ((cell.ore_frame + 4) % 9),
               color: cc,
             });
           }
@@ -1723,16 +1736,10 @@ function title(dt) {
       color: colorFade(title_state.fade3),
     });
     if (twinkle) {
-      sprite_twinkle.draw({
+      drawTwinkle({
         x, y, w: icon_w/TILE_W, h: icon_w/TILE_W,
         z: Z.UI + 0.01,
         frame: ore_frame,
-        color: colorFade(title_state.fade3),
-      });
-      sprite_twinkle.draw({
-        x, y, w: icon_w/TILE_W, h: icon_w/TILE_W,
-        z: Z.UI + 0.02,
-        frame: ((ore_frame + 4) % 9),
         color: colorFade(title_state.fade3),
       });
       ++ore_frame;
@@ -1750,12 +1757,12 @@ function title(dt) {
   y += icon_w;
   font.drawSizedAligned(glov_font.styleAlpha(subtitle_style, title_state.fade3),
     0, y, Z.UI, ui.font_height, font.ALIGN.HCENTER, game_width, 0,
-    'Cracks in rocks indicate there are 1, 2, or 3 adjacent gems');
+    'Cracks in rocks indicate there are 1, 2, or 3 adjacent Gems');
   y += ui.font_height + 2;
 
   font.drawSizedAligned(glov_font.styleAlpha(subtitle_style, title_state.fade3),
     0, y, Z.UI, ui.font_height, font.ALIGN.HCENTER, game_width, 0,
-    'Gems are only found in veins with yellow gem fragments');
+    'Gems are only found near yellow sparkles');
   y += ui.font_height + 4;
 
   y = game_height - ui.button_height * 2 - 12;
