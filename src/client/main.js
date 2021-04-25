@@ -704,6 +704,7 @@ class GameState {
     player_animation.setState('idle_down');
     this.player_dir = 3; // down
     this.active_pos = vec2();
+    this.active_drills = [];
     this.shovels = 3;
     this.drills = 5;
   }
@@ -733,7 +734,7 @@ class GameState {
     let ay = this.active_pos[1];
     if (!show_lower) {
       this.cur_level.draw(Z.LEVEL, color_white, this.next_level, this.noise_3d);
-      if (ax > 0 && ay > 0 && ax < BOARD_W - 1 && ay < BOARD_H - 1 && !this.active_drill) {
+      if (ax > 0 && ay > 0 && ax < BOARD_W - 1 && ay < BOARD_H - 1/* && !this.active_drills.length*/) {
         let tile = this.cur_level.get(ax, ay);
         if (this.shovels && tile === TILE_OPEN) {
           sprite_tiles.draw({
@@ -780,13 +781,14 @@ class GameState {
           dig_action = 'drill';
         }
       }
-      if (this.active_drill) {
+      for (let ii = 0; ii < this.active_drills.length; ++ii) {
+        let ad = this.active_drills[ii];
         sprite_drill.draw({
-          x: (this.active_drill.pos[0] + 0.5) * TILE_W,
-          y: (this.active_drill.pos[1] + 0.5) * TILE_W,
+          x: (ad.pos[0] + 0.5) * TILE_W,
+          y: (ad.pos[1] + 0.5) * TILE_W,
           z: Z.PLAYER - 1,
           frame: anim_drill.getFrame(engine.frame_dt),
-          rot: dir_to_rot[this.active_drill.dir],
+          rot: dir_to_rot[ad.dir],
         });
       }
     }
@@ -826,10 +828,10 @@ class GameState {
     let iy = floor(this.pos[1]);
     let message;
     let message_style = style_overlay;
-    if (!show_lower && !this.active_drill) {
+    if (!show_lower/* && !this.active_drills.length*/) {
       let cur_tile = this.cur_level.get(ax, ay);
       let next_tile = this.next_level.get(ax, ay);
-      if (!this.drills && !this.shovels) {
+      if (!this.drills && !this.shovels && !this.active_drills.length) {
         if (cur_tile === TILE_BRIDGE && canWalkThrough(next_tile)) {
           dig_action = 'descend';
           highlightTile(ax, ay, [0,1,0,1]);
@@ -876,13 +878,13 @@ class GameState {
         message_style = style_hint;
       }
     }
-    if (this.active_drill) {
-      dig_action = null;
-      message = null;
-    }
+    // if (this.active_drills.length) {
+    //   dig_action = null;
+    //   message = null;
+    // }
 
     if (!debug_zoom) {
-      if (!this.shovels && !this.drills && !this.active_drill) {
+      if (!this.shovels && !this.drills && !this.active_drills.length) {
         font.drawSizedAligned(style_overlay, posx, posy - TILE_W/2 - ui.font_height, Z.UI, ui.font_height,
           font.ALIGN.HCENTER, 0, 0, dig_action === 'descend' ? 'Go down here?' : 'Out of tools!');
       }
@@ -918,12 +920,12 @@ class GameState {
           assert.equal(dig_action, 'drill');
           --this.drills;
           assert(ix !== this.active_pos[0] || iy !== this.active_pos[1]);
-          this.active_drill = {
+          this.active_drills.push({
             pos: this.active_pos.slice(0),
             dir: this.player_dir,
             count: 0,
             countdown: 0,
-          };
+          });
         }
       }
     } else if (dig_action === 'descend') {
@@ -988,8 +990,8 @@ class GameState {
 
   }
 
-  updateDrill() {
-    let { active_drill } = this;
+  updateDrill(idx) {
+    let active_drill = this.active_drills[idx];
     active_drill.countdown -= engine.frame_dt;
     if (active_drill.countdown > 0) {
       return;
@@ -1008,14 +1010,14 @@ class GameState {
     xx = pos[0];
     yy = pos[1];
     if (xx <= 0 || yy <= 0 || xx >= BOARD_W - 1 || yy >= BOARD_H - 1) {
-      this.active_drill = null;
+      ridx(this.active_drills, idx);
       particle(xx, yy, 'drill_stop');
       ui.playUISound('drill_stop');
       return;
     }
     let tile = this.cur_level.get(xx, yy);
     if (!isDrillable(tile) && active_drill.count >= 3 || forceStopsDrill(tile)) {
-      this.active_drill = null;
+      ridx(this.active_drills, idx);
       particle(xx, yy, 'drill_stop');
       ui.playUISound('drill_stop');
       return;
@@ -1044,8 +1046,8 @@ class GameState {
   }
 
   update() {
-    if (this.active_drill) {
-      this.updateDrill();
+    for (let ii = this.active_drills.length - 1; ii >= 0; --ii) {
+      this.updateDrill(ii);
     }
     let dx = 0;
     dx -= input.keyDown(KEYS.LEFT) + input.keyDown(KEYS.A) + input.padButtonDown(PAD.LEFT);
@@ -1161,7 +1163,7 @@ class GameState {
     let iy2 = floor(y2);
     v2add(this.active_pos, [ix2, iy2], [DX[this.player_dir], DY[this.player_dir]]);
 
-    if (!this.active_drill && !this.shovels && !this.drills && !this.cur_level.did_game_over_detect) {
+    if (!this.active_drills.length && !this.shovels && !this.drills && !this.cur_level.did_game_over_detect) {
       this.cur_level.did_game_over_detect = true;
       if (this.cur_level.checkGameOver(this.pos, this.next_level)) {
         ui.modalDialog({
