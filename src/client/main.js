@@ -56,14 +56,16 @@ Z.UI_TEST = 200;
 //   shovels_add: 5,
 //   drills_add: 5,
 // };
+const seedmod = 'c';
 const BOARD_W = 48/2;
 const BOARD_H = 32/2;
 const NOISE_FREQ_XY = 0.1;
 const NOISE_FREQ_Z = 0.2;
 const level_def = {
   num_rooms: 6,
-  num_openings: 4,
+  num_openings: 2,
   gems_per_floor: 20,
+  gems_per_floor_min: 2,
   num_gem_sets: 4,
   room_min_size: 6,
   room_max_size: 32,
@@ -321,49 +323,54 @@ class Level {
     this.h = BOARD_H;
     this.particles = false;
     this.did_game_over_detect = false;
-    let map = this.map = [];
-    for (let yy = 0; yy < this.h; ++yy) {
-      map[yy] = [];
-      for (let xx = 0; xx < this.w; ++xx) {
-        let cell = new MapEntry(xx, yy);
-        map[yy].push(cell);
-        cell.lava_freq = randSimpleSpatial(xx, yy, 0) * 0.001;
-        let r = noise_3d(xx * NOISE_FREQ_XY, yy * NOISE_FREQ_XY, level_idx * NOISE_FREQ_Z);
-        if (r < 0.5) {
-          cell.is_ore_vein = true;
-          r = 1 - r * 2;
-          cell.ore_chance = r * r;
-        }
-      }
-    }
-    // Fill is_ore_vein_edge
-    let num_non_edge = 0;
-    for (let yy = 0; yy < this.h; ++yy) {
-      for (let xx = 0; xx < this.w; ++xx) {
-        let cell = this.getCell(xx, yy);
-        if (cell.is_ore_vein) {
-          for (let ii = 0; ii < DX.length; ++ii) {
-            if (!this.getCell(xx + DX[ii], yy + DY[ii]).is_ore_vein) {
-              cell.is_ore_vein_edge = true;
-              break;
-            }
-          }
-          if (!cell.is_ore_vein_edge) {
-            num_non_edge++;
+    let ore_vein_threshold = 0.5;
+    let map;
+    let num_gems = this.gems_total = max(level_def.gems_per_floor - (level_idx - 1), level_def.gems_per_floor_min);
+    while (true) {
+      map = this.map = [];
+      let num_ore_vein = 0;
+      for (let yy = 0; yy < this.h; ++yy) {
+        map[yy] = [];
+        for (let xx = 0; xx < this.w; ++xx) {
+          let cell = new MapEntry(xx, yy);
+          map[yy].push(cell);
+          cell.lava_freq = randSimpleSpatial(xx, yy, 0) * 0.001;
+          let r = noise_3d(xx * NOISE_FREQ_XY, yy * NOISE_FREQ_XY, level_idx * NOISE_FREQ_Z);
+          if (r < ore_vein_threshold) {
+            cell.is_ore_vein = true;
+            ++num_ore_vein;
+            r = 1 - r * 2;
+            cell.ore_chance = r * r;
           }
         }
       }
-    }
-    if (num_non_edge < level_def.gems_per_floor) {
-      // convert edges back to non-edge
+      if (num_ore_vein < num_gems * 1.5) {
+        ore_vein_threshold = 1 - (1 - ore_vein_threshold) * 0.5;
+        continue;
+      }
+      // Fill is_ore_vein_edge
+      let num_non_edge = 0;
       for (let yy = 0; yy < this.h; ++yy) {
         for (let xx = 0; xx < this.w; ++xx) {
           let cell = this.getCell(xx, yy);
           if (cell.is_ore_vein) {
-            cell.is_ore_vein_edge = false;
+            for (let ii = 0; ii < DX.length; ++ii) {
+              if (!this.getCell(xx + DX[ii], yy + DY[ii]).is_ore_vein) {
+                cell.is_ore_vein_edge = true;
+                break;
+              }
+            }
+            if (!cell.is_ore_vein_edge) {
+              num_non_edge++;
+            }
           }
         }
       }
+      if (num_non_edge < num_gems * 1.25) {
+        ore_vein_threshold = 1 - (1 - ore_vein_threshold) * 0.5;
+        continue;
+      }
+      break;
     }
 
     let rand = this.rand = randCreate(seed);
@@ -371,7 +378,6 @@ class Level {
     let { num_rooms } = level_def;
     this.num_openings_good = level_def.num_openings;
     this.num_openings_bad = level_def.num_openings;
-    let num_gems = this.gems_total = level_def.gems_per_floor;
     // for (let ii = 0; ii < num_rooms; ++ii) {
     //   let w = 2 + rand.range(8);
     //   let h = 2 + rand.range(8);
@@ -426,6 +432,7 @@ class Level {
     let gem_sets = [];
     this.gems_found = 0;
     let { num_gem_sets } = level_def;
+    num_gem_sets = min(num_gem_sets, max(floor(num_gems/2), 2));
     aborts = 100;
     while (num_gem_sets) {
       let x = 1 + rand.range(BOARD_W - 2);
@@ -568,7 +575,7 @@ class Level {
       let idx = rand.range(possible_spots_good.length);
       let pos = possible_spots_good[idx];
       ridx(possible_spots_good, idx);
-      map[pos[1]][pos[0]].tile = TILE_BRIDGE;
+      map[pos[1]][pos[0]].tile = TILE_PIT;
     }
     while (num_openings_bad && possible_spots_bad.length) {
       --num_openings_bad;
@@ -780,10 +787,10 @@ class GameState {
     this.gems_total = 0;
     gems_found_at = 0;
     this.level = 1;
-    this.noise_3d = createNoise3D(random_seed ? `3d.${random()}` : '3da');
-    this.cur_level = new Level(mashString(random_seed ? `1.${random()}` : '1a'), this.noise_3d, this.level);
+    this.noise_3d = createNoise3D(random_seed ? `3d.${random()}` : `3d${seedmod}`);
+    this.cur_level = new Level(mashString(random_seed ? `1.${random()}` : `1${seedmod}`), this.noise_3d, this.level);
     this.cur_level.activateParticles();
-    this.next_level = new Level(mashString(random_seed ? `2.${random()}` : '2a'), this.noise_3d, this.level + 1);
+    this.next_level = new Level(mashString(random_seed ? `2.${random()}` : `2${seedmod}`), this.noise_3d, this.level+1);
     this.cur_level.addOpenings(this.next_level);
     this.pos = this.cur_level.spawn_pos.slice(0);
     this.run_time = 0;
@@ -936,7 +943,7 @@ class GameState {
       let cur_tile = this.cur_level.get(ax, ay);
       let next_tile = this.next_level.get(ax, ay);
       if (this.canGoDown()) {
-        if (cur_tile === TILE_BRIDGE && canWalkThrough(next_tile)) {
+        if ((cur_tile === TILE_BRIDGE || cur_tile === TILE_PIT) && canWalkThrough(next_tile)) {
           dig_action = 'descend';
           if (!this.mustGoDown()) {
             message = 'Descend when you\'re ready';
@@ -993,6 +1000,9 @@ class GameState {
     //   dig_action = null;
     //   message = null;
     // }
+    if (engine.DEBUG && input.keyDown(KEYS.K)) {
+      dig_action = 'descend';
+    }
 
     if (!debug_zoom) {
       if (this.canGoDown()) {
@@ -1051,19 +1061,23 @@ class GameState {
         this.cur_level = this.next_level;
         this.cur_level.activateParticles();
         this.level++;
-        this.next_level = new Level(mashString(random_seed ? `${random()}` : `${this.level+1}a`),
+        this.next_level = new Level(mashString(random_seed ? `${random()}` : `${this.level+1}${seedmod}`),
           this.noise_3d, this.level + 1);
         this.cur_level.addOpenings(this.next_level);
         this.pos[0] = ax + 0.5;
         this.pos[1] = ay + 0.5;
         ui.playUISound('descend');
         let fade_time = max(1200 - this.level * 100, 100);
+        let tick_time = max(350 - this.level * 50, 150);
+        if (input.keyDown(KEYS.K)) {
+          tick_time = 1;
+          fade_time = 16;
+        }
         transition.queue(1000, transition.fade(fade_time));
         descend_anim = animation.create();
         let t = descend_anim.add(0, fade_time, nop);
         let num_shovels = level_def.shovels_add;
         let num_drills = level_def.drills_add;
-        let tick_time = max(350 - this.level * 50, 150);
         for (let ii = 0; ii < num_shovels; ++ii) {
           let done = false;
           t = descend_anim.add(t, tick_time, (progress) => {
