@@ -5,12 +5,10 @@ Ludum Dare 45 Entry by Jimbly
 
 ### TODO
 
-try adding some random open holes
-try smaller rooms and more drills
 add ore veins and cracks to the main menu intro
+drill and shovel pickups?
 
 high scores
-main menu : restart
 tutorial?
 better world tiles - try completely different visuals?
 better character

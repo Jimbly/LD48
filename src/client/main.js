@@ -56,7 +56,7 @@ Z.UI_TEST = 200;
 //   shovels_add: 5,
 //   drills_add: 5,
 // };
-const seedmod = 'c';
+const seedmod = 'e';
 const BOARD_W = 48/2;
 const BOARD_H = 32/2;
 const NOISE_FREQ_XY = 0.1;
@@ -68,13 +68,14 @@ const level_def = {
   gems_per_floor_min: 2,
   num_gem_sets: 4,
   room_min_size: 6,
-  room_max_size: 32,
+  room_max_size: 28,
   lava_min_size: 16,
   lava_max_size: 32,
   shovels_init: 3,
   drills_init: 5,
   shovels_add: 2,
   drills_add: 3,
+  holes: 12,
 };
 const REQUIRE_NO_TOOLS = false;
 
@@ -202,6 +203,11 @@ const style_overlay = glov_font.style(null, {
   outline_width: 2,
   outline_color: 0x000000ff,
 });
+const style_overlay_red = glov_font.style(null, {
+  color: pico8.font_colors[8],
+  outline_width: 2,
+  outline_color: 0x000000ff,
+});
 const style_found_all = glov_font.style(style_overlay, {
   color: 0x00FF00ff,
   outline_width: 2,
@@ -326,6 +332,7 @@ class Level {
     this.h = BOARD_H;
     this.particles = false;
     this.did_game_over_detect = false;
+    this.ever_seen = false;
     let ore_vein_threshold = 0.5;
     let map;
     let num_gems = this.gems_total = max(level_def.gems_per_floor - (level_idx - 1), level_def.gems_per_floor_min);
@@ -539,11 +546,37 @@ class Level {
             map[yy][xx].tile = TILE_CRACKED_1;
           } else if (count === 2) {
             map[yy][xx].tile = TILE_CRACKED_2;
-          } else if (count === 3) {
+          } else if (count >= 3) {
             map[yy][xx].tile = TILE_CRACKED_3;
           }
         }
       }
+    }
+
+    // carve random holes
+    let { holes } = level_def;
+    let possible_holes = [];
+    for (let yy = 1; yy < this.h - 1; ++yy) {
+      for (let xx = 1; xx < this.w - 1; ++xx) {
+        if (this.get(xx, yy) === TILE_SOLID) {
+          let neighbors = 0;
+          for (let ii = 0; ii < DX.length; ++ii) {
+            if (this.isSolid(xx + DX[ii], yy + DY[ii])) {
+              ++neighbors;
+            }
+          }
+          if (neighbors === 4) {
+            possible_holes.push([xx,yy]);
+          }
+        }
+      }
+    }
+    while (holes && possible_holes.length) {
+      let idx = rand.range(possible_holes.length);
+      let pair = possible_holes[idx];
+      ridx(possible_holes, idx);
+      this.map[pair[1]][pair[0]].tile = TILE_OPEN;
+      --holes;
     }
 
     // noise test
@@ -556,14 +589,18 @@ class Level {
     }
   }
 
-  addOpenings(next_level) {
+  addOpenings(next_level, player_pos) {
     let { map, num_openings_good, num_openings_bad, rand } = this;
+    player_pos = v2floor([], player_pos);
     // openings
     let possible_spots_good = [];
     let possible_spots_bad = [];
     for (let yy = 0; yy < BOARD_H; ++yy) {
       let row = map[yy];
       for (let xx = 0; xx < BOARD_W; ++xx) {
+        if (player_pos[0] === xx && player_pos[1] === yy) {
+          continue;
+        }
         if (row[xx].tile === TILE_OPEN) {
           if (!canWalkThrough(next_level.get(xx, yy))) {
             possible_spots_bad.push([xx,yy]);
@@ -798,8 +835,8 @@ class GameState {
     this.cur_level.activateParticles();
     this.gems_total += this.cur_level.gems_total;
     this.next_level = new Level(mashString(random_seed ? `2.${random()}` : `2${seedmod}`), this.noise_3d, this.level+1);
-    this.cur_level.addOpenings(this.next_level);
     this.pos = this.cur_level.spawn_pos.slice(0);
+    this.cur_level.addOpenings(this.next_level, this.pos);
     this.run_time = 0;
     player_animation.setState('idle_down');
     this.player_dir = 3; // down
@@ -823,8 +860,7 @@ class GameState {
   }
 
   canGoDown() {
-    return (!REQUIRE_NO_TOOLS || this.mustGoDown()) && !this.active_drills.length &&
-      !(this.level === 1 && !this.gems_found);
+    return (!REQUIRE_NO_TOOLS || this.mustGoDown()) && !this.active_drills.length;
   }
   mustGoDown() {
     return !this.shovels && !this.drills && !this.active_drills.length;
@@ -847,6 +883,9 @@ class GameState {
     let posy = this.pos[1] * TILE_W;
     this.cur_level.tickVisibility(this.pos[0], this.pos[1]);
     let show_lower = input.keyDown(KEYS.SHIFT);
+    if (show_lower) {
+      this.next_level.ever_seen = true;
+    }
     let dig_action;
     let ax = this.active_pos[0];
     let ay = this.active_pos[1];
@@ -953,10 +992,20 @@ class GameState {
         if ((cur_tile === TILE_BRIDGE || cur_tile === TILE_PIT) && canWalkThrough(next_tile)) {
           dig_action = 'descend';
           if (!this.mustGoDown()) {
-            message = 'Descend when you\'re ready';
-            message_style = style_hint;
+            if (!this.next_level.ever_seen) {
+              message = 'HINT: View the next level before descending';
+              highlightTile(ax, ay, pico8.colors[8]);
+            } else if (this.level === 1 && !this.gems_found) {
+              message = 'HINT: Find some gems before descending';
+              highlightTile(ax, ay, pico8.colors[8]);
+            } else if (this.next_level.ever_seen) {
+              message = 'Descend when you\'re ready';
+              message_style = style_hint;
+              highlightTile(ax, ay, pico8.colors[11]);
+            }
+          } else {
+            highlightTile(ax, ay, pico8.colors[11]);
           }
-          highlightTile(ax, ay, [0,1,0,1]);
         } else if (cur_tile === TILE_BRIDGE) {
           message = 'You can\'t jump down here.';
           highlightTile(ax, ay, [0.1,0.1,0.1,1]);
@@ -982,7 +1031,9 @@ class GameState {
       } else if (cur_tile === TILE_BRIDGE) {
         if (canWalkThrough(next_tile)) {
           message = `This is a hole, jump down it when you are ${REQUIRE_NO_TOOLS ? 'out of tools' : 'ready'}.`;
-          highlightTile(ax, ay, [0.1,0.1,0.1,1]);
+          if (!dig_action) {
+            highlightTile(ax, ay, [0.1,0.1,0.1,1]);
+          }
           message_style = style_hint;
         } else {
           message = `A hole was dug here, but it is not ${next_tile === TILE_LAVA ? 'safe' : 'clear'} below.`;
@@ -1013,9 +1064,26 @@ class GameState {
 
     if (!debug_zoom) {
       if (this.canGoDown()) {
-        font.drawSizedAligned(style_overlay, posx, posy - TILE_W/2 - ui.font_height, Z.UI, ui.font_height,
-          font.ALIGN.HCENTER, 0, 0, dig_action === 'descend' ? 'Go down here?' : this.mustGoDown() ?
-            'Out of tools!' : '');
+        if (dig_action === 'descend') {
+          if (!this.next_level.ever_seen) {
+            font.drawSizedAligned(this.next_level.ever_seen ? style_overlay : style_overlay_red,
+              posx, posy - TILE_W/2 - ui.font_height, Z.UI, ui.font_height,
+              font.ALIGN.HCENTER, 0, 0, this.next_level.ever_seen ? 'Go down here?' : 'What\'s down there?');
+            dig_action = null;
+          } else if (this.level === 1 && !this.gems_found) {
+            font.drawSizedAligned(style_overlay,
+              posx, posy - TILE_W/2 - ui.font_height, Z.UI, ui.font_height,
+              font.ALIGN.HCENTER, 0, 0, 'I\'m not ready to go deeper yet');
+            dig_action = null;
+          } else {
+            font.drawSizedAligned(style_overlay,
+              posx, posy - TILE_W/2 - ui.font_height, Z.UI, ui.font_height,
+              font.ALIGN.HCENTER, 0, 0, 'Go down here?');
+          }
+        } else if (this.mustGoDown()) {
+          font.drawSizedAligned(style_overlay, posx, posy - TILE_W/2 - ui.font_height, Z.UI, ui.font_height,
+            font.ALIGN.HCENTER, 0, 0, 'Out of tools!');
+        }
       }
       camera2d.zoom(posx, posy, 0.95);
     }
@@ -1069,9 +1137,9 @@ class GameState {
         this.level++;
         this.next_level = new Level(mashString(random_seed ? `${random()}` : `${this.level+1}${seedmod}`),
           this.noise_3d, this.level + 1);
-        this.cur_level.addOpenings(this.next_level);
         this.pos[0] = ax + 0.5;
         this.pos[1] = ay + 0.5;
+        this.cur_level.addOpenings(this.next_level, this.pos);
         ui.playUISound('descend');
         let fade_time = max(1200 - this.level * 100, 100);
         let tick_time = max(350 - this.level * 50, 150);
@@ -1530,6 +1598,17 @@ function title(dt) {
     }) || input.keyDownEdge(KEYS.ESC)) {
       transition.queue(Z.TRANSITION_FINAL, transition.splitScreen(500, 4, false));
       engine.setState(state ? play : playInit);
+    }
+    y += ui.button_height + 4;
+    if (state) {
+      if (ui.buttonText({
+        x: floor(game_width/2 - ui.button_width/2),
+        y,
+        text: 'Restart'
+      }) || input.keyDownEdge(KEYS.ESC)) {
+        transition.queue(Z.TRANSITION_FINAL, transition.splitScreen(500, 4, false));
+        engine.setState(playInit);
+      }
     }
 
     let snd_w = 64;
