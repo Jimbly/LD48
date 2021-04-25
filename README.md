@@ -3,7 +3,6 @@ Untitled - LD48 - Deeper and deeper
 
 Ludum Dare 45 Entry by Jimbly
 
-when going down - fade to black, increment tools, increment level, fade back from black
 tutorial
 sounds / music
 

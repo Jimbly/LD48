@@ -2,6 +2,7 @@
 const local_storage = require('./glov/local_storage.js');
 local_storage.setStoragePrefix('glovjs-playground'); // Before requiring anything else that might load from this
 
+const animation = require('./glov/animation.js');
 const assert = require('assert');
 const camera2d = require('./glov/camera2d.js');
 const engine = require('./glov/engine.js');
@@ -19,7 +20,8 @@ const { mashString, randCreate } = require('./glov/rand_alea.js');
 const { randSimpleSpatial } = require('./glov/rand_fast.js');
 const sprites = require('./glov/sprites.js');
 const sprite_animation = require('./glov/sprite_animation.js');
-const { clamp, ridx } = require('../common/util.js');
+const transition = require('./glov/transition.js');
+const { clamp, nop, ridx } = require('../common/util.js');
 const {
   vec2, v2add, v2addScale, v2floor, v2lengthSq, v2normalize, v2sub, v2scale,
   v3lerp, vec4, v4set,
@@ -606,6 +608,8 @@ function highlightTile(xx, yy, color) {
     w, 1, color);
 }
 
+let descend_anim;
+
 class GameState {
   constructor() {
     this.gems_found = 0;
@@ -621,8 +625,8 @@ class GameState {
     player_animation.setState('idle_down');
     this.player_dir = 3; // down
     this.active_pos = vec2();
-    this.shovels = 3;
-    this.drills = 5;
+    this.shovels = 0; // 3;
+    this.drills = 0; // 5;
   }
 
   setMainCamera() {
@@ -854,9 +858,41 @@ class GameState {
         this.next_level = new Level(mashString(`${random()}`), this.noise_3d, this.level + 1);
         this.pos[0] = ax + 0.5;
         this.pos[1] = ay + 0.5;
-        this.shovels = 5;
-        this.drills = 5;
         ui.playUISound('descend');
+        let fade_time = max(1200 - this.level * 100, 100);
+        transition.queue(1000, transition.fade(fade_time));
+        descend_anim = animation.create();
+        let t = descend_anim.add(0, fade_time, nop);
+        let num_shovels = 5;
+        let num_drills = 5;
+        let tick_time = max(350 - this.level * 50, 50);
+        for (let ii = 0; ii < num_shovels; ++ii) {
+          let done = false;
+          t = descend_anim.add(t, tick_time, (progress) => {
+            if (!done) {
+              done = true;
+              this.shovels++;
+            }
+          });
+        }
+        for (let ii = 0; ii < num_drills; ++ii) {
+          let done = false;
+          t = descend_anim.add(t, tick_time, (progress) => {
+            if (!done) {
+              done = true;
+              this.drills++;
+            }
+          });
+        }
+        t = descend_anim.add(t, 1, (progress) => {
+          if (progress === 1) {
+            transition.queue(1000, transition.fade(fade_time));
+            // eslint-disable-next-line no-use-before-define
+            engine.setState(play);
+          }
+        });
+        // eslint-disable-next-line no-use-before-define
+        engine.setState(descendInit);
       }
     }
     if (message) {
@@ -1040,6 +1076,135 @@ class GameState {
   }
 }
 
+let state;
+
+function colorCount(count) {
+  return font.styleColored(style_overlay, count === 1 ?
+    pico8.font_colors[9] : count ? pico8.font_colors[7] : pico8.font_colors[8]);
+}
+
+function hudShared() {
+  let icon_size = ui.font_height * 2;
+
+  let y = 0;
+  if (state.gems_total || true) {
+    sprite_tiles_ui.draw({
+      x: game_width - 4 - icon_size, y, w: icon_size, h: icon_size, z: Z.UI,
+      frame: TILE_GEM_UI,
+    });
+    font.drawSizedAligned(style_overlay, game_width - 4 - icon_size, y, Z.UI, ui.font_height * 2,
+      font.ALIGN.HRIGHT, 0, 0,
+      //`Total: ${state.gems_found + state.cur_level.gems_found}`);
+      `Score: ${state.gems_found + state.cur_level.gems_found}`);
+    y += icon_size + 4;
+  }
+  // sprite_tiles_ui.draw({
+  //   x: game_width - 4 - icon_size, y, w: icon_size, h: icon_size, z: Z.UI,
+  //   frame: TILE_GEM_UI,
+  // });
+  // font.drawSizedAligned(style_overlay, game_width - 4 - icon_size, y, Z.UI, ui.font_height * 2,
+  //   font.ALIGN.HRIGHT, 0, 0,
+  //   `${state.gems_total ? 'Level: ' : ''}${state.cur_level.gems_found}`);
+  // y += icon_size + 4;
+
+  font.drawSizedAligned(style_overlay, game_width - 4 - icon_size, y, Z.UI, ui.font_height * 2,
+    font.ALIGN.HRIGHT, 0, 0,
+    `Level: ${state.level}`);
+  y += icon_size + 4;
+
+  if ('tools on botttom') {
+    y = game_height - ui.font_height - 4 * 2 - icon_size;
+    if (state.pos[1] > BOARD_H - 4) {
+      y = 4;
+    }
+    let x = game_width / 2 - icon_size - 8;
+    sprite_tiles_ui.draw({
+      x, y, w: icon_size, h: icon_size, z: Z.UI,
+      frame: TILE_SHOVEL,
+    });
+    font.drawSizedAligned(colorCount(state.shovels), x, y, Z.UI, ui.font_height * 2,
+      font.ALIGN.HRIGHT, 0, 0,
+      `${state.shovels}`);
+
+    x = game_width / 2 + 2;
+    x += font.drawSizedAligned(colorCount(state.drills), x, y, Z.UI, ui.font_height * 2,
+      font.ALIGN.HLEFT, 0, 0,
+      `${state.drills}`);
+    sprite_drill_ui.draw({
+      x, y: y + icon_size, w: icon_size, h: icon_size, z: Z.UI,
+      frame: 0,
+      rot: 3*PI/2,
+    });
+  } else {
+    sprite_tiles_ui.draw({
+      x: game_width - 4 - icon_size, y, w: icon_size, h: icon_size, z: Z.UI,
+      frame: TILE_SHOVEL,
+    });
+    font.drawSizedAligned(style_overlay, game_width - 4 - icon_size, y, Z.UI, ui.font_height * 2,
+      font.ALIGN.HRIGHT, 0, 0,
+      `${state.shovels}`);
+    y += icon_size + 4;
+
+    sprite_drill_ui.draw({
+      x: game_width - 4 - icon_size, y: y + icon_size, w: icon_size, h: icon_size, z: Z.UI,
+      frame: 0,
+      rot: 3*PI/2,
+    });
+    font.drawSizedAligned(style_overlay, game_width - 4 - icon_size, y, Z.UI, ui.font_height * 2,
+      font.ALIGN.HRIGHT, 0, 0,
+      `${state.drills}`);
+    y += icon_size + 4;
+  }
+}
+
+function play(dt) {
+  gl.clearColor(0, 0, 0, 1);
+  ui.print(style_overlay, 4, 4, Z.UI, '[shift] - view level below');
+  ui.print(style_overlay, 4, 4+ui.font_height, Z.UI, '[WASD] - move');
+  ui.print(style_overlay, 4, 4+ui.font_height*2, Z.UI, '[Z] - zoom out');
+
+  hudShared();
+
+  if (engine.DEBUG) {
+    if (input.keyDownEdge(KEYS.R)) {
+      state = new GameState();
+    }
+    if (input.keyDownEdge(KEYS.V)) {
+      debug_visible = !debug_visible;
+    }
+    if (input.keyDownEdge(KEYS.F2)) {
+      debug_freecam = !debug_freecam;
+    }
+    if (input.keyDownEdge(KEYS.Z)) {
+      debug_zoom = !debug_zoom;
+    }
+  } else {
+    debug_zoom = input.keyDown(KEYS.Z);
+  }
+  state.update();
+  state.draw();
+  if (engine.DEBUG && input.keyDownEdge(KEYS.F3)) {
+    state.cur_level.activateParticles();
+  }
+  state.setMainCamera(); // for particles
+}
+
+function playInit(dt) {
+  state = new GameState();
+  engine.setState(play);
+  play(dt);
+}
+
+function descend(dt) {
+  descend_anim.update(dt);
+  hudShared();
+}
+function descendInit(dt) {
+  engine.setState(descend);
+  descend(dt);
+}
+
+
 export function main() {
   if (engine.DEBUG) {
     // Enable auto-reload, etc
@@ -1154,120 +1319,6 @@ export function main() {
     size: vec2(TILE_W, TILE_W),
     origin: vec2(0, 0),
   });
-
-  let state;
-
-  function colorCount(count) {
-    return font.styleColored(style_overlay, count === 1 ?
-      pico8.font_colors[9] : count ? pico8.font_colors[7] : pico8.font_colors[8]);
-  }
-
-  function play(dt) {
-    gl.clearColor(0, 0, 0, 1);
-    ui.print(style_overlay, 4, 4, Z.UI, '[shift] - view level below');
-    ui.print(style_overlay, 4, 4+ui.font_height, Z.UI, '[WASD] - move');
-    ui.print(style_overlay, 4, 4+ui.font_height*2, Z.UI, '[Z] - zoom out');
-    let icon_size = ui.font_height * 2;
-
-    let y = 0;
-    if (state.gems_total || true) {
-      sprite_tiles_ui.draw({
-        x: game_width - 4 - icon_size, y, w: icon_size, h: icon_size, z: Z.UI,
-        frame: TILE_GEM_UI,
-      });
-      font.drawSizedAligned(style_overlay, game_width - 4 - icon_size, y, Z.UI, ui.font_height * 2,
-        font.ALIGN.HRIGHT, 0, 0,
-        //`Total: ${state.gems_found + state.cur_level.gems_found}`);
-        `Score: ${state.gems_found + state.cur_level.gems_found}`);
-      y += icon_size + 4;
-    }
-    // sprite_tiles_ui.draw({
-    //   x: game_width - 4 - icon_size, y, w: icon_size, h: icon_size, z: Z.UI,
-    //   frame: TILE_GEM_UI,
-    // });
-    // font.drawSizedAligned(style_overlay, game_width - 4 - icon_size, y, Z.UI, ui.font_height * 2,
-    //   font.ALIGN.HRIGHT, 0, 0,
-    //   `${state.gems_total ? 'Level: ' : ''}${state.cur_level.gems_found}`);
-    // y += icon_size + 4;
-
-    font.drawSizedAligned(style_overlay, game_width - 4 - icon_size, y, Z.UI, ui.font_height * 2,
-      font.ALIGN.HRIGHT, 0, 0,
-      `Level: ${state.level}`);
-    y += icon_size + 4;
-
-    if ('tools on botttom') {
-      y = game_height - ui.font_height - 4 * 2 - icon_size;
-      if (state.pos[1] > BOARD_H - 4) {
-        y = 4;
-      }
-      let x = game_width / 2 - icon_size - 8;
-      sprite_tiles_ui.draw({
-        x, y, w: icon_size, h: icon_size, z: Z.UI,
-        frame: TILE_SHOVEL,
-      });
-      font.drawSizedAligned(colorCount(state.shovels), x, y, Z.UI, ui.font_height * 2,
-        font.ALIGN.HRIGHT, 0, 0,
-        `${state.shovels}`);
-
-      x = game_width / 2 + 2;
-      x += font.drawSizedAligned(colorCount(state.drills), x, y, Z.UI, ui.font_height * 2,
-        font.ALIGN.HLEFT, 0, 0,
-        `${state.drills}`);
-      sprite_drill_ui.draw({
-        x, y: y + icon_size, w: icon_size, h: icon_size, z: Z.UI,
-        frame: 0,
-        rot: 3*PI/2,
-      });
-    } else {
-      sprite_tiles_ui.draw({
-        x: game_width - 4 - icon_size, y, w: icon_size, h: icon_size, z: Z.UI,
-        frame: TILE_SHOVEL,
-      });
-      font.drawSizedAligned(style_overlay, game_width - 4 - icon_size, y, Z.UI, ui.font_height * 2,
-        font.ALIGN.HRIGHT, 0, 0,
-        `${state.shovels}`);
-      y += icon_size + 4;
-
-      sprite_drill_ui.draw({
-        x: game_width - 4 - icon_size, y: y + icon_size, w: icon_size, h: icon_size, z: Z.UI,
-        frame: 0,
-        rot: 3*PI/2,
-      });
-      font.drawSizedAligned(style_overlay, game_width - 4 - icon_size, y, Z.UI, ui.font_height * 2,
-        font.ALIGN.HRIGHT, 0, 0,
-        `${state.drills}`);
-      y += icon_size + 4;
-    }
-
-    if (engine.DEBUG) {
-      if (input.keyDownEdge(KEYS.R)) {
-        state = new GameState();
-      }
-      if (input.keyDownEdge(KEYS.V)) {
-        debug_visible = !debug_visible;
-      }
-      if (input.keyDownEdge(KEYS.F2)) {
-        debug_freecam = !debug_freecam;
-      }
-      if (input.keyDownEdge(KEYS.Z)) {
-        debug_zoom = !debug_zoom;
-      }
-    } else {
-      debug_zoom = input.keyDown(KEYS.Z);
-    }
-    state.update();
-    state.draw();
-    if (engine.DEBUG && input.keyDownEdge(KEYS.F3)) {
-      state.cur_level.activateParticles();
-    }
-    state.setMainCamera(); // for particles
-  }
-
-  function playInit(dt) {
-    state = new GameState();
-    engine.setState(play);
-    play(dt);
-  }
 
   engine.setState(playInit);
 }
