@@ -130,6 +130,9 @@ function canSeeThroughToBelow(tile) {
 function isSolid(tile) {
   return tile === TILE_SOLID || tile === TILE_CRACKED_1 || tile === TILE_CRACKED_2 || tile === TILE_CRACKED_3;
 }
+function forceStopsDrill(tile) {
+  return tile === TILE_LAVA;
+}
 function isDrillable(tile) {
   return isSolid(tile);
 }
@@ -650,7 +653,7 @@ class GameState {
             if (xx <= 0 || yy <= 0 || xx >= BOARD_W - 1 || yy >= BOARD_H - 1) {
               break;
             }
-            if (!this.cur_level.visible[yy][xx] || isDrillable(this.cur_level.map[yy][xx])) {
+            if (!this.cur_level.visible[yy][xx] || !forceStopsDrill(this.cur_level.map[yy][xx])) {
               let a = 1 - ii/5;
               highlightTile(xx, yy, [a,0.5*a,0,1]);
             } else {
@@ -722,7 +725,7 @@ class GameState {
           highlightTile(ax, ay, [0.1,0.1,0.1,1]);
         }
       } else if (cur_tile === TILE_GEM) {
-        message = 'This is a Gem, it will be collected when you leave the level.';
+        message = 'This is a Gem.  Score!';
         highlightTile(ax, ay, pico8.colors[10]);
         message_style = style_hint;
       } else if (cur_tile === TILE_LAVA) {
@@ -839,7 +842,10 @@ class GameState {
     active_drill.countdown += max(DRILL_TIME - active_drill.count*10, 16);
     let { dir, pos } = active_drill;
     let [xx, yy] = pos;
-    this.cur_level.map[yy][xx] = TILE_OPEN;
+    let do_drill = this.cur_level.isSolid(xx, yy);
+    if (do_drill) {
+      this.cur_level.map[yy][xx] = TILE_OPEN;
+    }
     pos[0] += DX[dir];
     pos[1] += DY[dir];
     xx = pos[0];
@@ -849,12 +855,15 @@ class GameState {
       ui.playUISound('drill_stop');
       return;
     }
-    if (!this.cur_level.isSolid(xx, yy)) {
+    let tile = this.cur_level.get(xx, yy);
+    if (!isDrillable(tile) && active_drill.count >= 3 || forceStopsDrill(tile)) {
       this.active_drill = null;
       ui.playUISound('drill_stop');
       return;
     }
-    ui.playUISound('drill_block');
+    if (do_drill) {
+      ui.playUISound('drill_block');
+    }
   }
 
   setPlayerDir(dir) {
