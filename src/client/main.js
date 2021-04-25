@@ -645,7 +645,7 @@ class GameState {
     this.player_dir = 3; // down
     this.active_pos = vec2();
     this.shovels = 3;
-    this.drills = 5;
+    this.drills = 0;
   }
 
   setMainCamera() {
@@ -838,7 +838,7 @@ class GameState {
       }) || input.keyDownEdge(KEYS.SPACE) || input.keyDownEdge(KEYS.E) || do_drill) {
         if (dig_action === 'hole') {
           --this.shovels;
-          ui.playUISound('shovel');
+          let good = false;
           for (let ii = 0; ii < DIG_DX.length; ++ii) {
             let yy = this.active_pos[1] + DIG_DY[ii];
             let xx = this.active_pos[0] + DIG_DX[ii];
@@ -848,8 +848,12 @@ class GameState {
             if (this.cur_level.map[yy][xx] === TILE_OPEN) {
               this.cur_level.map[yy][xx] = TILE_BRIDGE;
               particle(xx, yy, 'shovel');
+              if (canWalkThrough(this.next_level.get(xx, yy))) {
+                good = true;
+              }
             }
           }
+          ui.playUISound(good ? 'shovel1' : 'shovel2');
         } else {
           assert.equal(dig_action, 'drill');
           --this.drills;
@@ -892,6 +896,7 @@ class GameState {
             if (!done) {
               done = true;
               this.shovels++;
+              ui.playUISound('gem_found');
             }
           });
         }
@@ -901,6 +906,7 @@ class GameState {
             if (!done) {
               done = true;
               this.drills++;
+              ui.playUISound('gem_found');
             }
           });
         }
@@ -1244,7 +1250,7 @@ function pumpMusic() {
   }
   pumping = true;
   // soundPlayMusic('msg_out');
-  // setTimeout(function () {
+  // pump_timeout = setTimeout(function () {
   //   pumping = false;
   //   pumpMusic();
   // }, 10*1000);
@@ -1384,11 +1390,12 @@ export function main() {
   }
 
   let ui_sounds = {
-    gem_found: 'button_click',
-    drill_block: 'button_click',
-    drill_stop: 'button_click',
-    shovel: 'button_click',
-    descend: 'button_click',
+    gem_found: ['pickup1b', 'pickup1b', 'pickup1b', 'pickup1b', 'pickup2b', 'pickup3b', 'pickup4b', 'pickup5b'],
+    drill_block: ['dig1', 'dig2'],
+    drill_stop: ['dig_stop'],
+    shovel1: ['hole1'],
+    shovel2: ['hole2'],
+    descend: 'descend',
   };
 
   if (!engine.startup({
