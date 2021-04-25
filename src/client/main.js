@@ -249,7 +249,8 @@ let raycast = (function () {
     if (!NOISE_DEBUG) {
       cell.lit = lit_value;
     }
-    level.setCellVisible(walk[0], walk[1], lit_value);
+    let walkable = true;
+    level.setCellVisible(walk[0], walk[1], lit_value, true);
     // walk
     let ret = 0;
     // let backidx = 0;
@@ -269,9 +270,12 @@ let raycast = (function () {
         cell.lit = cur_lit;
       }
       if (cur_lit > 0.1) { // && !visible[walk[1]][walk[0]]) {
-        level.setCellVisible(walk[0], walk[1], cur_lit);
+        level.setCellVisible(walk[0], walk[1], cur_lit, walkable);
       }
       ret = !canSeeThrough(cell.tile);
+      if (walkable && !canWalkThrough(cell.tile)) {
+        walkable = false;
+      }
       dvis *= 0.9;
     } while (!ret);
     // v2copy(out_prevpos, walk);
@@ -671,11 +675,11 @@ class Level {
     // }
   }
 
-  setCellVisible(x, y, lit_value) {
+  setCellVisible(x, y, lit_value, walkable) {
     if (!this.map[y][x].visible) {
       this.map[y][x].visible = true;
     }
-    if (this.map[y][x].tile === TILE_GEM_UNLIT && lit_value > 0.5) {
+    if (this.map[y][x].tile === TILE_GEM_UNLIT && lit_value > 0.5 && walkable) {
       if (this.particles) {
         ui.playUISound('gem_found');
         particle(x, y, 'gem_found');

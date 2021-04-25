@@ -5,9 +5,6 @@ Ludum Dare 45 Entry by Jimbly
 
 ### TODO
 
-try significantly smaller floors - can we do screen size and still get parallax?
-  would do fewer tools per floor, and would need the floors to be more puzzle-y
-only claim gems that you can actually walk to and see, not ones you see across the lava - do can walk to filter in raycast?
 sound when getting to 20/20
 change color when getting to 20/20
 excess drills/shovels turn into points?
