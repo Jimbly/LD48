@@ -23,7 +23,7 @@ const { soundPlayMusic } = require('./glov/sound.js');
 const sprites = require('./glov/sprites.js');
 const sprite_animation = require('./glov/sprite_animation.js');
 const transition = require('./glov/transition.js');
-const { clamp, nop, ridx } = require('../common/util.js');
+const { clamp, easeOut, nop, ridx } = require('../common/util.js');
 const {
   vec2, v2add, v2addScale, v2floor, v2lengthSq, v2normalize, v2sub, v2scale,
   v3lerp, vec4, v4copy,
@@ -197,6 +197,11 @@ const style_overlay = glov_font.style(null, {
   outline_width: 2,
   outline_color: 0x000000ff,
 });
+const style_found_all = glov_font.style(style_overlay, {
+  color: 0x00FF00ff,
+  outline_width: 2,
+  outline_color: 0x000000ff,
+});
 const style_hint = glov_font.style(style_overlay, {
   color: 0x808080ff,
 });
@@ -308,6 +313,7 @@ class MapEntry {
   }
 }
 const dummy_cell = new MapEntry();
+let gems_found_at = 0;
 
 class Level {
   constructor(seed, noise_3d, level_idx) {
@@ -686,6 +692,10 @@ class Level {
       }
       this.map[y][x].tile = TILE_GEM;
       this.gems_found++;
+      gems_found_at = engine.frame_timestamp;
+      if (this.gems_found === this.gems_total) {
+        ui.playUISound('level_complete');
+      }
     }
   }
 
@@ -768,6 +778,7 @@ class GameState {
   constructor() {
     this.gems_found = 0;
     this.gems_total = 0;
+    gems_found_at = 0;
     this.level = 1;
     this.noise_3d = createNoise3D(random_seed ? `3d.${random()}` : '3da');
     this.cur_level = new Level(mashString(random_seed ? `1.${random()}` : '1a'), this.noise_3d, this.level);
@@ -798,10 +809,21 @@ class GameState {
   }
 
   canGoDown() {
-    return (!REQUIRE_NO_TOOLS || this.mustGoDown()) && !this.active_drills.length;
+    return (!REQUIRE_NO_TOOLS || this.mustGoDown()) && !this.active_drills.length &&
+      !(this.level === 1 && !this.cur_level.gems_found);
   }
   mustGoDown() {
     return !this.shovels && !this.drills && !this.active_drills.length;
+  }
+
+  drillAt(x, y) {
+    for (let ii = 0; ii < this.active_drills.length; ++ii) {
+      let ad = this.active_drills[ii];
+      if (ad.pos[0] === x && ad.pos[1] === y) {
+        return true;
+      }
+    }
+    return false;
   }
 
   draw() {
@@ -836,7 +858,7 @@ class GameState {
             }
           }
           dig_action = 'hole';
-        } else if (this.drills && isDrillable(tile)) {
+        } else if (this.drills && isDrillable(tile) && !this.drillAt(ax, ay)) {
           sprite_drill.draw({
             x: (ax + 0.5) * TILE_W,
             y: (ay + 0.5) * TILE_W,
@@ -928,6 +950,9 @@ class GameState {
           message = 'Out of tools! Find a clear hole to jump down.';
           highlightTile(ax, ay, [0.1,0.1,0.1,1]);
         }
+      }
+      if (message) {
+        // from above
       } else if (cur_tile === TILE_GEM) {
         message = 'This is a Gem.  Score!';
         highlightTile(ax, ay, pico8.colors[10]);
@@ -1291,15 +1316,30 @@ function hudShared() {
     x: game_width - 4 - icon_size, y, w: icon_size, h: icon_size, z: Z.UI,
     frame: TILE_GEM_UI,
   });
-  font.drawSizedAligned(style_overlay, game_width - 4 - icon_size, y, Z.UI, ui.font_height * 2,
+  let found_font_size = ui.font_height * 2;
+  let found_all = state.cur_level.gems_found === state.cur_level.gems_total;
+  if (gems_found_at && engine.frame_timestamp - gems_found_at < 500) {
+    let a = easeOut(1 - (engine.frame_timestamp - gems_found_at) / 500, 2);
+    found_font_size *= 1 + a * (found_all ? 1 : 0.5);
+  }
+  let gems_text = `${state.cur_level.gems_found}/${state.cur_level.gems_total}`;
+  let text_w = font.getStringWidth(style_overlay, ui.font_height * 2, gems_text);
+  font.drawSizedAligned(found_all ? style_found_all : style_overlay,
+    game_width - 4 - icon_size, y, Z.UI + 1, found_font_size,
     font.ALIGN.HRIGHT, 0, 0,
-    `${state.gems_total ? 'Level: ' : ''}${state.cur_level.gems_found}/${state.cur_level.gems_total}`);
+    gems_text);
+  if (state.level > 1) {
+    font.drawSizedAligned(found_all ? style_found_all : style_overlay,
+      game_width - 4 - icon_size - text_w, y, Z.UI, ui.font_height * 2,
+      font.ALIGN.HRIGHT, 0, 0,
+      `Level ${state.level}: `);
+  }
   y += icon_size + 4;
 
-  font.drawSizedAligned(style_overlay, game_width - 4 - icon_size, y, Z.UI, ui.font_height * 2,
-    font.ALIGN.HRIGHT, 0, 0,
-    `Level: ${state.level}`);
-  y += icon_size + 4;
+  // font.drawSizedAligned(style_overlay, game_width - 4 - icon_size, y, Z.UI, ui.font_height * 2,
+  //   font.ALIGN.HRIGHT, 0, 0,
+  //   `Level: ${state.level}`);
+  // y += icon_size + 4;
 
   if ('tools on botttom') {
     y = game_height - ui.font_height - 4 * 2 - icon_size;
@@ -1368,6 +1408,9 @@ function play(dt) {
     }
     if (input.keyDownEdge(KEYS.F2)) {
       debug_freecam = !debug_freecam;
+    }
+    if (input.keyDownEdge(KEYS.F4)) {
+      gems_found_at = engine.frame_timestamp;
     }
     if (input.keyDownEdge(KEYS.Z)) {
       debug_zoom = !debug_zoom;
@@ -1549,6 +1592,7 @@ export function main() {
     shovel1: ['hole1'],
     shovel2: ['hole2'],
     descend: 'descend',
+    level_complete: 'level_complete',
   };
 
   if (!engine.startup({

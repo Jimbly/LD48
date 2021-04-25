@@ -5,13 +5,12 @@ Ludum Dare 45 Entry by Jimbly
 
 ### TODO
 
-sound when getting to 20/20
-change color when getting to 20/20
 excess drills/shovels turn into points?
 try infinite drills, scored to get all gems (probably also want smaller floors), limited shovels
-some indication of how well you're doing on current level
-  make gem count snap big and shrink whenever it increments
-  maybe display this floor's gem counter on top of each gem as a floater when it is found
+try fewer natural holes and have them illuminate only one tile; maybe need more shovels
+try adding some random open holes
+try smaller rooms and more drills
+add ore veins and cracks to the main menu intro
 
 high scores
 main menu : restart
@@ -21,9 +20,10 @@ better character
 balance / fun ?
 particles/glow on lava
 maybe show outline of walkable above area while viewing lower level
-touch countrols:
+touch controls:
   make view lower and zoom buttons for touch players
   click location to move next to it and face it, click icon to trigger drill/dig
+start music on level 2?
 
 ### Original brainstorming notes
 
