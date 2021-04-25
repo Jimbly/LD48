@@ -174,6 +174,7 @@ const LAVA_DELTA = [
   [1, 1], [1, 1], [1, 1], [1, 1],
 ];
 
+let state;
 
 function canSeeThroughToBelow(tile) {
   return tile === TILE_BRIDGE || tile === TILE_PIT;
@@ -699,6 +700,7 @@ class Level {
       }
       this.map[y][x].tile = TILE_GEM;
       this.gems_found++;
+      state.gems_found++;
       gems_found_at = engine.frame_timestamp;
       if (this.gems_found === this.gems_total) {
         ui.playUISound('level_complete');
@@ -790,6 +792,7 @@ class GameState {
     this.noise_3d = createNoise3D(random_seed ? `3d.${random()}` : `3d${seedmod}`);
     this.cur_level = new Level(mashString(random_seed ? `1.${random()}` : `1${seedmod}`), this.noise_3d, this.level);
     this.cur_level.activateParticles();
+    this.gems_total += this.cur_level.gems_total;
     this.next_level = new Level(mashString(random_seed ? `2.${random()}` : `2${seedmod}`), this.noise_3d, this.level+1);
     this.cur_level.addOpenings(this.next_level);
     this.pos = this.cur_level.spawn_pos.slice(0);
@@ -817,7 +820,7 @@ class GameState {
 
   canGoDown() {
     return (!REQUIRE_NO_TOOLS || this.mustGoDown()) && !this.active_drills.length &&
-      !(this.level === 1 && !this.cur_level.gems_found);
+      !(this.level === 1 && !this.gems_found);
   }
   mustGoDown() {
     return !this.shovels && !this.drills && !this.active_drills.length;
@@ -1056,10 +1059,9 @@ class GameState {
         x: game_width - ui.button_width,
         y: game_height - ui.button_height,
       }) || input.keyDownEdge(KEYS.SPACE) || input.keyDownEdge(KEYS.E)) {
-        this.gems_found += this.cur_level.gems_found;
-        this.gems_total += this.cur_level.gems_total;
         this.cur_level = this.next_level;
         this.cur_level.activateParticles();
+        this.gems_total += this.cur_level.gems_total;
         this.level++;
         this.next_level = new Level(mashString(random_seed ? `${random()}` : `${this.level+1}${seedmod}`),
           this.noise_3d, this.level + 1);
@@ -1304,8 +1306,6 @@ class GameState {
   }
 }
 
-let state;
-
 function colorCount(count) {
   return font.styleColored(style_overlay, count === 1 ?
     pico8.font_colors[9] : count ? pico8.font_colors[7] : pico8.font_colors[8]);
@@ -1315,15 +1315,15 @@ function hudShared() {
   let icon_size = ui.font_height * 2;
 
   let y = 0;
-  if (state.gems_total) {
+  if (state.level > 1) {
     sprite_tiles_ui.draw({
       x: game_width - 4 - icon_size, y, w: icon_size, h: icon_size, z: Z.UI,
       frame: TILE_GEM_UI,
     });
     font.drawSizedAligned(style_overlay, game_width - 4 - icon_size, y, Z.UI, ui.font_height * 2,
       font.ALIGN.HRIGHT, 0, 0,
-      //`Score: ${state.gems_found + state.cur_level.gems_found}`);
-      `Total: ${state.gems_found + state.cur_level.gems_found}/${state.gems_total + state.cur_level.gems_total}`);
+      //`Score: ${state.gems_found}`);
+      `Total: ${state.gems_found}/${state.gems_total}`);
     y += icon_size + 4;
   }
   sprite_tiles_ui.draw({
