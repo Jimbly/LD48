@@ -5,8 +5,9 @@ Ludum Dare 45 Entry by Jimbly
 
 ### TODO
 
-add ore veins and cracks to the main menu intro
 drill and shovel pickups?
+
+game ended with me having a bunch of tools, but nothing to do with them - ensure a traversible path exists between all gems?
 
 high scores
 tutorial?

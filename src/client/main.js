@@ -1142,7 +1142,7 @@ class GameState {
         this.cur_level.addOpenings(this.next_level, this.pos);
         ui.playUISound('descend');
         let fade_time = max(1200 - this.level * 100, 100);
-        let tick_time = max(350 - this.level * 50, 150);
+        let tick_time = max(350 - this.level * 50, 200);
         if (input.keyDown(KEYS.K)) {
           tick_time = 1;
           fade_time = 16;
@@ -1563,34 +1563,98 @@ function killFX() {
 
 let title_state;
 let title_seq;
+function colorFade(fade) {
+  return [1,1,1,fade];
+}
 function title(dt) {
   gl.clearColor(0, 0, 0, 1);
   title_seq.update(dt);
-  let y = 20;
+  let y = 10;
   title_font.drawSizedAligned(glov_font.styleAlpha(title_style, title_state.fade0),
     0, y, Z.UI, 32, font.ALIGN.HCENTER, game_width, 0,
     'Dwarven Surveyor');
 
   y += 32 + 5;
 
-  font.drawSizedAligned(glov_font.styleAlpha(subtitle_style2, title_state.fade2),
+  font.drawSizedAligned(glov_font.styleAlpha(subtitle_style2, title_state.fade4),
     0, y, Z.UI, ui.font_height, font.ALIGN.HCENTER, game_width, 0,
     'by Jimb Esser in 48 hours for Ludum Dare 48');
 
-  y += ui.font_height + 16;
+  y += ui.font_height + 4;
 
+  let icon_w = 32;
+  sprite_drill_ui.draw({
+    x: game_width / 2 - icon_w / 2,
+    y,
+    w: icon_w, h: icon_w,
+    frame: anim_drill.getFrame(engine.frame_dt),
+    color: colorFade(title_state.fade1),
+  });
+  y += icon_w;
   font.drawSizedAligned(glov_font.styleAlpha(subtitle_style, title_state.fade1),
     0, y, Z.UI, ui.font_height, font.ALIGN.HCENTER, game_width, 0,
     'Use your Drills to find Gems on the current level');
   y += ui.font_height + 4;
 
-  font.drawSizedAligned(glov_font.styleAlpha(subtitle_style, title_state.fade1),
+  sprite_tiles_ui.draw({
+    x: (game_width - icon_w) / 2,
+    y,
+    w: icon_w, h: icon_w,
+    frame: TILE_SHOVEL,
+    color: colorFade(title_state.fade2),
+  });
+  y += icon_w;
+  font.drawSizedAligned(glov_font.styleAlpha(subtitle_style, title_state.fade2),
     0, y, Z.UI, ui.font_height, font.ALIGN.HCENTER, game_width, 0,
-    'Use your Shovels to scout out the next level');
+    'Use your Shovels to peek into the next level');
   y += ui.font_height + 4;
 
-  y += 16;
-  if (title_state.fade3) {
+  let x = (game_width - (icon_w + 4) * 8) / 2;
+  let ore_frame = 0;
+  function drawTile(tile, twinkle) {
+    sprite_tiles_ui.draw({
+      x, y, w: icon_w, h: icon_w,
+      frame: tile,
+      color: colorFade(title_state.fade3),
+    });
+    if (twinkle) {
+      sprite_twinkle.draw({
+        x, y, w: icon_w/TILE_W, h: icon_w/TILE_W,
+        z: Z.UI + 0.01,
+        frame: ore_frame,
+        color: colorFade(title_state.fade3),
+      });
+      sprite_twinkle.draw({
+        x, y, w: icon_w/TILE_W, h: icon_w/TILE_W,
+        z: Z.UI + 0.02,
+        frame: ((ore_frame + 4) % 9),
+        color: colorFade(title_state.fade3),
+      });
+      ++ore_frame;
+    }
+    x += icon_w + 4;
+  }
+  drawTile(TILE_SOLID, false);
+  drawTile(TILE_SOLID, true);
+  drawTile(TILE_CRACKED_1, true);
+  drawTile(TILE_GEM, false);
+  drawTile(TILE_CRACKED_2, true);
+  drawTile(TILE_GEM, false);
+  drawTile(TILE_CRACKED_3, true);
+  drawTile(TILE_GEM, false);
+  y += icon_w;
+  font.drawSizedAligned(glov_font.styleAlpha(subtitle_style, title_state.fade3),
+    0, y, Z.UI, ui.font_height, font.ALIGN.HCENTER, game_width, 0,
+    'Cracks in rocks indicate there are 1, 2, or 3 adjacent gems');
+  y += ui.font_height + 2;
+
+  font.drawSizedAligned(glov_font.styleAlpha(subtitle_style, title_state.fade3),
+    0, y, Z.UI, ui.font_height, font.ALIGN.HCENTER, game_width, 0,
+    'Gems are only found in veins with yellow gem fragments');
+  y += ui.font_height + 4;
+
+  y = game_height - ui.button_height * 2 - 12;
+  if (title_state.fade5) {
     if (ui.buttonText({
       x: floor(game_width/2 - ui.button_width/2),
       y,
@@ -1645,6 +1709,7 @@ function titleInit(dt) {
     fade2: 0,
     fade3: 0,
     fade4: 0,
+    fade5: 0,
   };
   title_seq = animation.create();
   let t = title_seq.add(0, 300, (v) => (title_state.fade0 = v));
@@ -1653,8 +1718,12 @@ function titleInit(dt) {
   t = title_seq.add(t, 500, nop);
   t = title_seq.add(t, 300, (v) => (title_state.fade2 = v));
   t = title_seq.add(t, 500, nop);
-  title_seq.add(t, 300, (v) => (title_state.fade3 = v));
-  if (!first_time || engine.DEBUG) {
+  t = title_seq.add(t, 300, (v) => (title_state.fade3 = v));
+  t = title_seq.add(t, 500, nop);
+  t = title_seq.add(t, 300, (v) => (title_state.fade4 = v));
+  t = title_seq.add(t, 500, nop);
+  t = title_seq.add(t, 300, (v) => (title_state.fade5 = v));
+  if (!first_time) {
     title_seq.update(30000);
   }
   first_time = false;
@@ -1790,5 +1859,5 @@ export function main() {
   });
 
   pumpMusic();
-  engine.setState(engine.DEBUG ? playInit : titleInit);
+  engine.setState(engine.DEBUG && false ? playInit : titleInit);
 }
