@@ -37,6 +37,43 @@ Z.PLAYER = 15;
 Z.PARTICLES = 20;
 Z.UI_TEST = 200;
 
+
+const BOARD_W = 48;
+const BOARD_H = 32;
+const NOISE_FREQ_XY = 0.1;
+const NOISE_FREQ_Z = 0.2;
+const level_def = {
+  num_rooms: 15,
+  num_openings: 20,
+  gems_per_floor: 100,
+  num_gem_sets: 20,
+  room_min_size: 8,
+  room_max_size: 64,
+  lava_min_size: 32,
+  lava_max_size: 96,
+};
+// const BOARD_W = 48/2;
+// const BOARD_H = 32/2;
+// const NOISE_FREQ_XY = 0.1;
+// const NOISE_FREQ_Z = 0.2;
+// const level_def = {
+//   num_rooms: 6,
+//   num_openings: 6,
+//   gems_per_floor: 20,
+//   num_gem_sets: 4,
+//   room_min_size: 6,
+//   room_max_size: 32,
+//   lava_min_size: 16,
+//   lava_max_size: 32,
+// };
+
+let NOISE_DEBUG = false;
+let debug_zoom = engine.DEBUG;
+let debug_visible = engine.DEBUG;
+let debug_freecam = false;
+let random_seed = false;
+
+
 // Virtual viewport for our game logic
 const game_width = 384;
 const game_height = 256;
@@ -59,8 +96,6 @@ const DRILL_TIME = 400;
 // const DIG_LEN = 5;
 const DRILL_TRIGGER_TIME = 600;
 
-const BOARD_W = 48;
-const BOARD_H = 32;
 const TILE_W = 16;
 const BOARD_W_PX = BOARD_W * TILE_W;
 const BOARD_H_PX = BOARD_H * TILE_W;
@@ -147,12 +182,6 @@ function canSeeThrough(tile) {
 function canWalkThrough(tile) {
   return tile === TILE_BRIDGE || tile === TILE_OPEN || tile === TILE_GEM || tile === TILE_GEM_UNLIT;
 }
-
-let NOISE_DEBUG = false;
-let debug_zoom = engine.DEBUG;
-let debug_visible = debug_zoom;
-let debug_freecam = false;
-let random_seed = false;
 
 const style_overlay = glov_font.style(null, {
   color: 0xFFFFFFff,
@@ -253,9 +282,6 @@ function particle(xx, yy, key) {
 
 let temp_color = vec4(0,0,0,1);
 
-const NOISE_FREQ_XY = 0.1;
-const NOISE_FREQ_Z = 0.2;
-
 class MapEntry {
   constructor(x, y) {
     this.tile = TILE_SOLID;
@@ -292,6 +318,7 @@ class Level {
       }
     }
     // Fill is_ore_vein_edge
+    let num_non_edge = 0;
     for (let yy = 0; yy < this.h; ++yy) {
       for (let xx = 0; xx < this.w; ++xx) {
         let cell = this.getCell(xx, yy);
@@ -302,16 +329,30 @@ class Level {
               break;
             }
           }
+          if (!cell.is_ore_vein_edge) {
+            num_non_edge++;
+          }
+        }
+      }
+    }
+    if (num_non_edge < level_def.gems_per_floor) {
+      // convert edges back to non-edge
+      for (let yy = 0; yy < this.h; ++yy) {
+        for (let xx = 0; xx < this.w; ++xx) {
+          let cell = this.getCell(xx, yy);
+          if (cell.is_ore_vein) {
+            cell.is_ore_vein_edge = false;
+          }
         }
       }
     }
 
     let rand = this.rand = randCreate(seed);
     // rooms
-    let num_rooms = this.num_rooms = 20;
-    this.num_openings_good = 20;
-    this.num_openings_bad = 20;
-    let num_gems = this.gems_total = 100;
+    let { num_rooms } = level_def;
+    this.num_openings_good = level_def.num_openings;
+    this.num_openings_bad = level_def.num_openings;
+    let num_gems = this.gems_total = level_def.gems_per_floor;
     // for (let ii = 0; ii < num_rooms; ++ii) {
     //   let w = 2 + rand.range(8);
     //   let h = 2 + rand.range(8);
@@ -327,11 +368,17 @@ class Level {
     //   }
     // }
     let best_spawn = -1;
+    let aborts = 100;
     for (let ii = 0; ii < num_rooms; ++ii) {
-      let size = 8 + rand.range(64);
+      let size = level_def.room_min_size + rand.range(level_def.room_max_size - level_def.room_min_size + 1);
       let x = 1 + rand.range(BOARD_W - 2);
       let y = 1 + rand.range(BOARD_H - 2);
       if (map[y][x].tile !== TILE_SOLID) {
+        ii--;
+        if (!--aborts) {
+          console.log('ABORT: num_rooms');
+          break;
+        }
         continue;
       }
       let pts = [[x,y]];
@@ -359,13 +406,18 @@ class Level {
     // ore
     let gem_sets = [];
     this.gems_found = 0;
-    let num_gem_sets = 20;
+    let { num_gem_sets } = level_def;
+    aborts = 100;
     while (num_gem_sets) {
       let x = 1 + rand.range(BOARD_W - 2);
       let y = 1 + rand.range(BOARD_H - 2);
       let cell = map[y][x];
       if (cell.is_ore_vein && cell.tile !== TILE_GEM_UNLIT) {
         if (rand.random() < cell.ore_chance) {
+          if (!--aborts) {
+            console.log('ABORT: num_gem_sets');
+            break;
+          }
           continue;
         }
         --num_gems;
@@ -374,6 +426,7 @@ class Level {
         gem_sets.push({ x, y, pts: [[x,y]] });
       }
     }
+    aborts = 100;
     while (num_gems) {
       let set = gem_sets[rand.range(gem_sets.length)];
       let pt = set.pts[rand.range(set.pts.length)];
@@ -385,6 +438,10 @@ class Level {
       }
       let cell = map[yy][xx];
       if (cell.tile === TILE_GEM_UNLIT || !cell.is_ore_vein || cell.is_ore_vein_edge) {
+        if (!--aborts) {
+          console.log('ABORT: num_gems');
+          break;
+        }
         continue;
       }
       --num_gems;
@@ -401,18 +458,20 @@ class Level {
 
     // Lava
     let num_lava = level_idx;
-    let aborts = 100;
+    let { lava_min_size, lava_max_size } = level_def;
+    aborts = 100;
     for (let ii = 0; ii < num_lava; ++ii) {
       let x = 1 + rand.range(BOARD_W - 2);
       let y = 1 + rand.range(BOARD_H - 2);
       if (map[y][x].tile !== TILE_SOLID) {
         if (!--aborts) {
+          console.log('ABORT: num_lava');
           break;
         }
         --ii;
         continue;
       }
-      let size = 32 + rand.range(64);
+      let size = lava_min_size + rand.range(lava_max_size - lava_min_size + 1);
       let pts = [[x,y]];
       map[y][x].tile = TILE_LAVA;
       while (size) {
