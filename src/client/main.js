@@ -38,37 +38,46 @@ Z.PARTICLES = 20;
 Z.UI_TEST = 200;
 
 
-const BOARD_W = 48;
-const BOARD_H = 32;
-const NOISE_FREQ_XY = 0.1;
-const NOISE_FREQ_Z = 0.2;
-const level_def = {
-  num_rooms: 15,
-  num_openings: 20,
-  gems_per_floor: 100,
-  num_gem_sets: 20,
-  room_min_size: 8,
-  room_max_size: 64,
-  lava_min_size: 32,
-  lava_max_size: 96,
-};
-// const BOARD_W = 48/2;
-// const BOARD_H = 32/2;
+// const BOARD_W = 48;
+// const BOARD_H = 32;
 // const NOISE_FREQ_XY = 0.1;
 // const NOISE_FREQ_Z = 0.2;
 // const level_def = {
-//   num_rooms: 6,
-//   num_openings: 6,
-//   gems_per_floor: 20,
-//   num_gem_sets: 4,
-//   room_min_size: 6,
-//   room_max_size: 32,
-//   lava_min_size: 16,
-//   lava_max_size: 32,
+//   num_rooms: 15,
+//   num_openings: 20,
+//   gems_per_floor: 100,
+//   num_gem_sets: 20,
+//   room_min_size: 8,
+//   room_max_size: 64,
+//   lava_min_size: 32,
+//   lava_max_size: 96,
+//   shovels_init: 3,
+//   drills_init: 5,
+//   shovels_add: 5,
+//   drills_add: 5,
 // };
+const BOARD_W = 48/2;
+const BOARD_H = 32/2;
+const NOISE_FREQ_XY = 0.1;
+const NOISE_FREQ_Z = 0.2;
+const level_def = {
+  num_rooms: 6,
+  num_openings: 6,
+  gems_per_floor: 20,
+  num_gem_sets: 4,
+  room_min_size: 6,
+  room_max_size: 32,
+  lava_min_size: 16,
+  lava_max_size: 32,
+  shovels_init: 3,
+  drills_init: 5,
+  shovels_add: 3,
+  drills_add: 2,
+};
+const REQUIRE_NO_TOOLS = false;
 
 let NOISE_DEBUG = false;
-let debug_zoom = engine.DEBUG;
+let debug_zoom = false;
 let debug_visible = engine.DEBUG;
 let debug_freecam = false;
 let random_seed = false;
@@ -764,8 +773,8 @@ class GameState {
     this.player_dir = 3; // down
     this.active_pos = vec2();
     this.active_drills = [];
-    this.shovels = 3;
-    this.drills = 5;
+    this.shovels = level_def.shovels_init;
+    this.drills = level_def.drills_init;
   }
 
   setMainCamera() {
@@ -779,6 +788,13 @@ class GameState {
     if (debug_zoom) {
       camera2d.setAspectFixed(BOARD_W_PX, BOARD_H_PX);
     }
+  }
+
+  canGoDown() {
+    return (!REQUIRE_NO_TOOLS || this.mustGoDown()) && !this.active_drills.length;
+  }
+  mustGoDown() {
+    return !this.shovels && !this.drills && !this.active_drills.length;
   }
 
   draw() {
@@ -890,9 +906,13 @@ class GameState {
     if (!show_lower/* && !this.active_drills.length*/) {
       let cur_tile = this.cur_level.get(ax, ay);
       let next_tile = this.next_level.get(ax, ay);
-      if (!this.drills && !this.shovels && !this.active_drills.length) {
+      if (this.canGoDown()) {
         if (cur_tile === TILE_BRIDGE && canWalkThrough(next_tile)) {
           dig_action = 'descend';
+          if (!this.mustGoDown()) {
+            message = 'Descend when you\'re ready';
+            message_style = style_hint;
+          }
           highlightTile(ax, ay, [0,1,0,1]);
         } else if (cur_tile === TILE_BRIDGE) {
           message = 'You can\'t jump down here.';
@@ -915,7 +935,7 @@ class GameState {
         message_style = style_hint;
       } else if (cur_tile === TILE_BRIDGE) {
         if (canWalkThrough(next_tile)) {
-          message = 'This is a hole, jump down it when you are out of tools.';
+          message = `This is a hole, jump down it when you are ${REQUIRE_NO_TOOLS ? 'out of tools' : 'ready'}.`;
           highlightTile(ax, ay, [0.1,0.1,0.1,1]);
           message_style = style_hint;
         } else {
@@ -943,9 +963,10 @@ class GameState {
     // }
 
     if (!debug_zoom) {
-      if (!this.shovels && !this.drills && !this.active_drills.length) {
+      if (this.canGoDown()) {
         font.drawSizedAligned(style_overlay, posx, posy - TILE_W/2 - ui.font_height, Z.UI, ui.font_height,
-          font.ALIGN.HCENTER, 0, 0, dig_action === 'descend' ? 'Go down here?' : 'Out of tools!');
+          font.ALIGN.HCENTER, 0, 0, dig_action === 'descend' ? 'Go down here?' : this.mustGoDown() ?
+            'Out of tools!' : '');
       }
       camera2d.zoom(posx, posy, 0.95);
     }
@@ -997,10 +1018,10 @@ class GameState {
         this.gems_total += this.cur_level.gems_total;
         this.cur_level = this.next_level;
         this.cur_level.activateParticles();
-        this.cur_level.addOpenings(this.next_level);
         this.level++;
         this.next_level = new Level(mashString(random_seed ? `${random()}` : `${this.level+1}`),
           this.noise_3d, this.level + 1);
+        this.cur_level.addOpenings(this.next_level);
         this.pos[0] = ax + 0.5;
         this.pos[1] = ay + 0.5;
         ui.playUISound('descend');
@@ -1008,8 +1029,8 @@ class GameState {
         transition.queue(1000, transition.fade(fade_time));
         descend_anim = animation.create();
         let t = descend_anim.add(0, fade_time, nop);
-        let num_shovels = 5;
-        let num_drills = 5;
+        let num_shovels = level_def.shovels_add;
+        let num_drills = level_def.drills_add;
         let tick_time = max(350 - this.level * 50, 50);
         for (let ii = 0; ii < num_shovels; ++ii) {
           let done = false;
@@ -1222,7 +1243,7 @@ class GameState {
     let iy2 = floor(y2);
     v2add(this.active_pos, [ix2, iy2], [DX[this.player_dir], DY[this.player_dir]]);
 
-    if (!this.active_drills.length && !this.shovels && !this.drills && !this.cur_level.did_game_over_detect) {
+    if (this.mustGoDown() && !this.cur_level.did_game_over_detect) {
       this.cur_level.did_game_over_detect = true;
       if (this.cur_level.checkGameOver(this.pos, this.next_level)) {
         ui.modalDialog({
