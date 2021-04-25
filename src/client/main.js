@@ -1346,7 +1346,7 @@ function hudShared() {
     font.drawSizedAligned(found_all ? style_found_all : style_overlay,
       game_width - 4 - icon_size - text_w, y, Z.UI, ui.font_height * 2,
       font.ALIGN.HRIGHT, 0, 0,
-      `Level ${state.level}: `);
+      `Floor ${state.level}: `);
   }
   y += icon_size + 4;
 

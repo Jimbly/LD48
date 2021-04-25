@@ -5,11 +5,10 @@ Ludum Dare 45 Entry by Jimbly
 
 ### TODO
 
-excess drills/shovels turn into points?
-try infinite drills, scored to get all gems (probably also want smaller floors), limited shovels
 try fewer natural holes and have them illuminate only one tile; maybe need more shovels
 try adding some random open holes
 try smaller rooms and more drills
+try spending gems to do dig/drill and see how deep you can go
 add ore veins and cracks to the main menu intro
 
 high scores
