@@ -79,10 +79,10 @@ let sprite_dwarf;
 let player_animation;
 let anim_drill;
 
-const ANIM_DIR = ['idle_left', 'idle_right', 'idle_up', 'idle_down'];
+const ANIM_DIR = ['idle_left', 'idle_up', 'idle_right', 'idle_down'];
 
-const DX = [-1, 1, 0, 0];
-const DY = [0, 0, -1, 1];
+const DX = [-1, 0, 1, 0];
+const DY = [0, -1, 0, 1];
 
 const DX_ABOVE = [-1, 0, 1, -1, 0, 1, -1, 0, 1, -2, 2, 0, 0];
 const DY_ABOVE = [-1, -1, -1, 0, 0, 0, 1, 1, 1, 0, 0, -2, 2];
@@ -599,7 +599,7 @@ class Level {
   }
 }
 
-const dir_to_rot = [PI/2, 3*PI/2, PI, 0];
+const dir_to_rot = [PI/2, PI, 3*PI/2, 0];
 
 function highlightTile(xx, yy, color) {
   let w = 1;
@@ -946,8 +946,15 @@ class GameState {
       return;
     }
     player_animation.setState(ANIM_DIR[dir]);
+    if (this.player_dir === (dir + 3) % 4 ||
+      this.player_dir === dir ||
+      this.player_dir === (dir + 1) % 4
+    ) {
+      // keep it
+    } else {
+      this.run_time = 0;
+    }
     this.player_dir = dir;
-    this.run_time = 0;
   }
 
   update() {
@@ -960,6 +967,11 @@ class GameState {
     let dy = 0;
     dy -= input.keyDown(KEYS.UP) + input.keyDown(KEYS.W) + input.padButtonDown(PAD.UP);
     dy += input.keyDown(KEYS.DOWN) + input.keyDown(KEYS.S) + input.padButtonDown(PAD.DOWN);
+    if (sqrt(dx * dx + dy * dy) > engine.frame_dt) {
+      let temp = v2scale([], v2normalize([], [dx, dy]), engine.frame_dt);
+      dx = temp[0];
+      dy = temp[1];
+    }
     let { pos, cur_level } = this;
     let ix = floor(pos[0]);
     let iy = floor(pos[1]);
@@ -975,12 +987,12 @@ class GameState {
           this.setPlayerDir(0);
         } else {
           this.target_pos = [floor(pos[0] + 0.5), iy];
-          this.setPlayerDir(1);
+          this.setPlayerDir(2);
         }
       } else {
         if (dy < 0) {
           this.target_pos = [ix, floor(pos[1] - 0.5)];
-          this.setPlayerDir(2);
+          this.setPlayerDir(1);
         } else {
           this.target_pos = [ix, floor(pos[1] + 0.5)];
           this.setPlayerDir(3);
