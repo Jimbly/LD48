@@ -5,22 +5,19 @@ Ludum Dare 45 Entry by Jimbly
 
 ### TODO
 
-drill and shovel pickups?
-
-game ended with me having a bunch of tools, but nothing to do with them - ensure a traversible path exists between all gems?
-  at least need to detect that
-
-high scores
-
 better world tiles - try completely different visuals?
 better character
-balance / fun ?
+balance / fun  pass on each mode
 particles/glow on lava
 maybe show outline of walkable above area while viewing lower level
 touch controls:
   make view lower and zoom buttons for touch players
   click location to move next to it and face it, click icon to trigger drill/dig
 start music on level 2?
+drill and shovel pickups?
+
+game ended with me having a bunch of tools, but nothing to do with them - ensure a traversible path exists between all gems?
+  at least should detect that
 
 ### Original brainstorming notes
 

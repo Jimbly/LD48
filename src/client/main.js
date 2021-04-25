@@ -135,6 +135,7 @@ let player_animation;
 let anim_drill;
 
 const ANIM_DIR = ['idle_left', 'idle_up', 'idle_right', 'idle_down'];
+const ANIM_DIR_WALK = ['walk_left', 'walk_up', 'walk_right', 'walk_down'];
 
 const DX = [-1, 0, 1, 0];
 const DY = [0, -1, 0, 1];
@@ -183,6 +184,10 @@ const LAVA_DELTA = [
 ];
 
 let state;
+
+function esc() {
+  return input.keyDownEdge(KEYS.ESC) || input.padButtonDownEdge(PAD.B);
+}
 
 function canSeeThroughToBelow(tile) {
   return tile === TILE_BRIDGE || tile === TILE_PIT;
@@ -902,7 +907,7 @@ class GameState {
     let posx = this.pos[0] * TILE_W;
     let posy = this.pos[1] * TILE_W;
     this.cur_level.tickVisibility(this.pos[0], this.pos[1]);
-    let show_lower = input.keyDown(KEYS.SHIFT);
+    let show_lower = input.keyDown(KEYS.SHIFT) || input.padButtonDown(PAD.LEFT_TRIGGER);
     if (show_lower) {
       this.next_level.ever_seen = true;
     }
@@ -1013,7 +1018,7 @@ class GameState {
           dig_action = 'descend';
           if (!this.mustGoDown()) {
             if (!this.next_level.ever_seen) {
-              message = 'HINT: View the next level before descending';
+              message = 'HINT: View the next level (SHIFT) before descending';
               highlightTile(ax, ay, pico8.colors[8]);
             } else if (this.level === 1 && !this.gems_found) {
               message = 'HINT: Find some gems before descending';
@@ -1111,10 +1116,10 @@ class GameState {
     camera2d.setAspectFixed(game_width, game_height);
     if (dig_action === 'hole' || dig_action === 'drill') {
       if (ui.button({
-        text: `[space] ${dig_action === 'hole' ? 'Dig hole' : 'Drill tunnel'}`,
+        text: `${input.pad_mode ? '[A]' : '[space]'} ${dig_action === 'hole' ? 'Dig hole' : 'Drill tunnel'}`,
         x: game_width - ui.button_width,
         y: game_height - ui.button_height,
-      }) || input.keyDownEdge(KEYS.SPACE) || input.keyDownEdge(KEYS.E) || do_drill) {
+      }) || input.keyDownEdge(KEYS.SPACE) || input.keyDownEdge(KEYS.E) || input.padButtonDownEdge(PAD.A) || do_drill) {
         if (dig_action === 'hole') {
           --this.shovels;
           let good = false;
@@ -1256,11 +1261,11 @@ class GameState {
     }
   }
 
-  setPlayerDir(dir) {
+  setPlayerDir(dir, moving) {
+    player_animation.setState((moving ? ANIM_DIR_WALK : ANIM_DIR)[dir]);
     if (this.player_dir === dir) {
       return;
     }
-    player_animation.setState(ANIM_DIR[dir]);
     if (this.player_dir === (dir + 3) % 4 ||
       this.player_dir === dir ||
       this.player_dir === (dir + 1) % 4
@@ -1291,6 +1296,7 @@ class GameState {
     let ix = floor(pos[0]);
     let iy = floor(pos[1]);
     let speed = 0.005;
+    const threshold = 0.001 / engine.frame_dt;
     if (abs(dx) + abs(dy)) {
       this.run_time += engine.frame_dt;
       if (this.run_time > 800) {
@@ -1299,21 +1305,22 @@ class GameState {
       if (abs(dx) > abs(dy)) {
         if (dx < 0) {
           this.target_pos = [floor(pos[0] - 0.5), iy];
-          this.setPlayerDir(0);
+          this.setPlayerDir(0, dx < -threshold);
         } else {
           this.target_pos = [floor(pos[0] + 0.5), iy];
-          this.setPlayerDir(2);
+          this.setPlayerDir(2, dx > threshold);
         }
       } else {
         if (dy < 0) {
           this.target_pos = [ix, floor(pos[1] - 0.5)];
-          this.setPlayerDir(1);
+          this.setPlayerDir(1, dy < -threshold);
         } else {
           this.target_pos = [ix, floor(pos[1] + 0.5)];
-          this.setPlayerDir(3);
+          this.setPlayerDir(3, dy > threshold);
         }
       }
     } else {
+      this.setPlayerDir(this.player_dir, false);
       this.target_pos = null;
       this.run_time = 0;
     }
@@ -1508,11 +1515,11 @@ function play(dt) {
   gl.clearColor(0, 0, 0, 1);
 
   if (state.pos[0] > 4 || state.pos[1] > 3) {
-    ui.print(style_overlay, 4, 4, Z.UI, '[shift] - view level below');
-    ui.print(style_overlay, 4, 4+ui.font_height, Z.UI, '[WASD] - move');
-    ui.print(style_overlay, 4, 4+ui.font_height*2, Z.UI, '[esc] - menu');
+    ui.print(style_overlay, 4, 4, Z.UI, `${input.pad_mode ? '[LT]' : '[Shift]'} - view level below`);
+    ui.print(style_overlay, 4, 4+ui.font_height, Z.UI, `${input.pad_mode ? '[Stick]' : '[WASD]'} - move`);
+    ui.print(style_overlay, 4, 4+ui.font_height*2, Z.UI, `${input.pad_mode ? '[B]' : '[Esc]'} - menu`);
     if (level_def.w > 24) {
-      ui.print(style_overlay, 4, 4+ui.font_height*3, Z.UI, '[Z] - zoom out');
+      ui.print(style_overlay, 4, 4+ui.font_height*3, Z.UI, `${input.pad_mode ? '[RT]' : '[Z]'} - zoom out`);
     }
   }
 
@@ -1532,11 +1539,11 @@ function play(dt) {
     if (input.keyDownEdge(KEYS.F4)) {
       gems_found_at = engine.frame_timestamp;
     }
-    if (input.keyDownEdge(KEYS.Z)) {
+    if (input.keyDownEdge(KEYS.Z) || input.padButtonDownEdge(PAD.RIGHT_TRIGGER)) {
       debug_zoom = !debug_zoom;
     }
   } else {
-    debug_zoom = input.keyDown(KEYS.Z);
+    debug_zoom = input.keyDown(KEYS.Z) || input.padButtonDown(PAD.RIGHT_TRIGGER);
   }
   state.update();
   state.draw();
@@ -1544,7 +1551,7 @@ function play(dt) {
     state.cur_level.activateParticles();
   }
   state.setMainCamera(); // for particles
-  if (input.keyDownEdge(KEYS.ESC)) {
+  if (esc()) {
     // eslint-disable-next-line no-use-before-define
     engine.setState(titleInit);
     transition.queue(Z.TRANSITION_FINAL, transition.splitScreen(500, 4, false));
@@ -1636,7 +1643,7 @@ function gameOver(dt) {
     x: floor(game_width/2 - ui.button_width/2),
     y,
     text: 'Main Menu'
-  }) || input.keyDownEdge(KEYS.ESC)) {
+  }) || esc()) {
     state = null;
     // eslint-disable-next-line no-use-before-define
     engine.setState(titleInit);
@@ -1759,7 +1766,7 @@ function title(dt) {
     if (state) {
       if (ui.buttonText({
         x: bx1, y, text: 'Resume'
-      }) || input.keyDownEdge(KEYS.ESC)) {
+      }) || esc()) {
         transition.queue(Z.TRANSITION_FINAL, transition.splitScreen(500, 4, false));
         engine.setState(play);
       }
@@ -1772,7 +1779,7 @@ function title(dt) {
       if (ui.buttonText({
         x: bx1, y,
         text: 'Play'
-      }) || input.keyDownEdge(KEYS.ESC)) {
+      }) || esc()) {
         transition.queue(Z.TRANSITION_FINAL, transition.splitScreen(500, 4, false));
         level_def = level_defs.score_attack;
         engine.setState(playInit);
@@ -1965,7 +1972,7 @@ function highScore(dt) {
   let size = 8;
   if (ui.buttonText({
     x: 4, y, text: 'Back',
-  }) || input.keyDownEdge(KEYS.ESC)) {
+  }) || esc()) {
     engine.setState(titleInit);
   }
   font.drawSizedAligned(null, 0, y, Z.UI, size * 2, glov_font.ALIGN.HCENTERFIT, game_width, 0, 'HIGH SCORES');
@@ -2052,28 +2059,45 @@ export function main() {
     hs: [16, 16, 16],
     origin: vec2(0,0),
   });
+  let pft = 100;
   player_animation = sprite_animation.create({
     idle_down: {
       frames: [0],
-      times: [200],
+      times: [150],
+    },
+    walk_down: {
+      frames: [0,1,0,2],
+      times: [pft,pft,pft,pft],
     },
     idle_up: {
-      frames: [1],
-      times: [200],
-    },
-    idle_right: {
-      frames: [2],
-      times: [200],
-    },
-    idle_left: {
       frames: [3],
       times: [200],
+    },
+    walk_up: {
+      frames: [3,4,3,5],
+      times: [pft,pft,pft,pft],
+    },
+    idle_right: {
+      frames: [6],
+      times: [200],
+    },
+    walk_right: {
+      frames: [6,7,6,8],
+      times: [pft,pft,pft,pft],
+    },
+    idle_left: {
+      frames: [9],
+      times: [200],
+    },
+    walk_left: {
+      frames: [9,10,9,11],
+      times: [pft,pft,pft,pft],
     },
   });
   sprite_dwarf = sprites.create({
     name: 'dwarf',
-    ws: [16, 16],
-    hs: [16, 16],
+    ws: [16, 16, 16],
+    hs: [16, 16, 16, 16],
     size: vec2(TILE_W, TILE_W),
     origin: vec2(0.5, 0.5),
   });
