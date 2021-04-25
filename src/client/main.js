@@ -76,6 +76,7 @@ const level_def = {
   shovels_add: 2,
   drills_add: 3,
   holes: 12,
+  max_levels: 10,
 };
 const REQUIRE_NO_TOOLS = false;
 
@@ -1131,56 +1132,62 @@ class GameState {
         x: game_width - ui.button_width,
         y: game_height - ui.button_height,
       }) || input.keyDownEdge(KEYS.SPACE) || input.keyDownEdge(KEYS.E)) {
-        this.cur_level = this.next_level;
-        this.cur_level.activateParticles();
-        this.gems_total += this.cur_level.gems_total;
         this.level++;
-        this.next_level = new Level(mashString(random_seed ? `${random()}` : `${this.level+1}${seedmod}`),
-          this.noise_3d, this.level + 1);
-        this.pos[0] = ax + 0.5;
-        this.pos[1] = ay + 0.5;
-        this.cur_level.addOpenings(this.next_level, this.pos);
-        ui.playUISound('descend');
-        let fade_time = max(1200 - this.level * 100, 100);
-        let tick_time = max(350 - this.level * 50, 200);
-        if (input.keyDown(KEYS.K)) {
-          tick_time = 1;
-          fade_time = 16;
-        }
-        transition.queue(1000, transition.fade(fade_time));
-        descend_anim = animation.create();
-        let t = descend_anim.add(0, fade_time, nop);
-        let num_shovels = level_def.shovels_add;
-        let num_drills = level_def.drills_add;
-        for (let ii = 0; ii < num_shovels; ++ii) {
-          let done = false;
-          t = descend_anim.add(t, tick_time, (progress) => {
-            if (!done) {
-              done = true;
-              this.shovels++;
-              ui.playUISound('gem_found');
-            }
-          });
-        }
-        for (let ii = 0; ii < num_drills; ++ii) {
-          let done = false;
-          t = descend_anim.add(t, tick_time, (progress) => {
-            if (!done) {
-              done = true;
-              this.drills++;
-              ui.playUISound('gem_found');
-            }
-          });
-        }
-        t = descend_anim.add(t, 1, (progress) => {
-          if (progress === 1) {
-            transition.queue(1000, transition.fade(fade_time));
-            // eslint-disable-next-line no-use-before-define
-            engine.setState(play);
+        if (this.level > level_def.max_levels || engine.DEBUG && input.keyDown(KEYS.L)) {
+          transition.queue(Z.TRANSITION_FINAL, transition.fade(1000));
+          // eslint-disable-next-line no-use-before-define
+          engine.setState(gameOverInit);
+        } else {
+          let fade_time = max(1200 - this.level * 100, 100);
+          transition.queue(Z.TRANSITION_FINAL, transition.fade(fade_time));
+          this.cur_level = this.next_level;
+          this.cur_level.activateParticles();
+          this.gems_total += this.cur_level.gems_total;
+          this.next_level = new Level(mashString(random_seed ? `${random()}` : `${this.level+1}${seedmod}`),
+            this.noise_3d, this.level + 1);
+          this.pos[0] = ax + 0.5;
+          this.pos[1] = ay + 0.5;
+          this.cur_level.addOpenings(this.next_level, this.pos);
+          ui.playUISound('descend');
+          let tick_time = max(350 - this.level * 50, 200);
+          if (input.keyDown(KEYS.K)) {
+            tick_time = 1;
+            fade_time = 16;
           }
-        });
-        // eslint-disable-next-line no-use-before-define
-        engine.setState(descendInit);
+          descend_anim = animation.create();
+          let t = descend_anim.add(0, fade_time, nop);
+          let num_shovels = level_def.shovels_add;
+          let num_drills = level_def.drills_add;
+          for (let ii = 0; ii < num_shovels; ++ii) {
+            let done = false;
+            t = descend_anim.add(t, tick_time, (progress) => {
+              if (!done) {
+                done = true;
+                this.shovels++;
+                ui.playUISound('gem_found');
+              }
+            });
+          }
+          for (let ii = 0; ii < num_drills; ++ii) {
+            let done = false;
+            t = descend_anim.add(t, tick_time, (progress) => {
+              if (!done) {
+                done = true;
+                this.drills++;
+                ui.playUISound('gem_found');
+              }
+            });
+          }
+          t = descend_anim.add(t, 1, (progress) => {
+            if (progress === 1) {
+              transition.queue(Z.TRANSITION_FINAL, transition.fade(fade_time));
+              // eslint-disable-next-line no-use-before-define
+              engine.setState(play);
+            }
+          });
+          // eslint-disable-next-line no-use-before-define
+          engine.setState(descendInit);
+        }
       }
     }
     if (message) {
@@ -1370,7 +1377,12 @@ class GameState {
           title: 'Game Over',
           text: 'Sorry, you\'re stuck, with no way to proceed!  Probably you\'re just unlucky?',
           buttons: {
-            OK: null
+            OK: null,
+            Menu: () => {
+              transition.queue(Z.TRANSITION_FINAL, transition.fade(1000));
+              // eslint-disable-next-line no-use-before-define
+              engine.setState(gameOverInit);
+            },
           },
         });
       }
@@ -1550,11 +1562,67 @@ function playInit(dt) {
 
 function descend(dt) {
   descend_anim.update(dt);
+  font.drawSizedAligned(style_overlay, game_width/2, game_height/2, Z.UI,
+    ui.font_height * 2, font.ALIGN.HVCENTER, 0, 0,
+    `Level ${state.level}${level_def.max_levels ? ` / ${level_def.max_levels}` : ''}`);
   hudShared();
 }
 function descendInit(dt) {
   engine.setState(descend);
   descend(dt);
+}
+
+function gameOver(dt) {
+  let y = 10;
+  title_font.drawSizedAligned(title_style,
+    0, y, Z.UI, 32, font.ALIGN.HCENTER, game_width, 0,
+    'Dwarven Surveyor');
+  y += 32 + 5;
+
+  y += 4;
+  let line_height = ui.font_height * 2;
+  font.drawSizedAligned(subtitle_style,
+    0, y, Z.UI, line_height, font.ALIGN.HCENTER, game_width, 0,
+    state.level > level_def.max_levels ? 'YOU WIN!' : 'GAME OVER');
+  y += line_height + 4;
+  y += 4;
+
+  font.drawSizedAligned(style_overlay, 0, y, Z.UI,
+    line_height, font.ALIGN.HCENTER, game_width, 0,
+    `Level: ${min(state.level, level_def.max_levels || Infinity)}` +
+    `${level_def.max_levels ? ` / ${level_def.max_levels}` : ''}`);
+  y += line_height + 4;
+
+  let w = font.drawSizedAligned(style_overlay, 0, y, Z.UI,
+    line_height, font.ALIGN.HCENTER, game_width, 0,
+    `Total: ${state.gems_found} / ${state.gems_total}`);
+  sprite_tiles_ui.draw({
+    x: (game_width + w) / 2 + 4,
+    y,
+    w: line_height, h: line_height,
+    frame: TILE_GEM,
+  });
+  y += ui.font_height * 2 + 4;
+
+  font.drawSizedAligned(style_overlay, 0, y, Z.UI,
+    line_height, font.ALIGN.HCENTER, game_width, 0,
+    `Unused tools: ${state.shovels + state.drills}`);
+  y += ui.font_height * 2 + 4;
+
+  if (ui.buttonText({
+    x: floor(game_width/2 - ui.button_width/2),
+    y,
+    text: 'Main Menu'
+  }) || input.keyDownEdge(KEYS.ESC)) {
+    state = null;
+    // eslint-disable-next-line no-use-before-define
+    engine.setState(titleInit);
+  }
+  y += ui.button_height + 4;
+}
+function gameOverInit(dt) {
+  engine.setState(gameOver);
+  gameOver(dt);
 }
 
 function killFX() {
@@ -1722,8 +1790,8 @@ function titleInit(dt) {
   t = title_seq.add(t, 500, nop);
   t = title_seq.add(t, 300, (v) => (title_state.fade4 = v));
   t = title_seq.add(t, 500, nop);
-  t = title_seq.add(t, 300, (v) => (title_state.fade5 = v));
-  if (!first_time) {
+  title_seq.add(t, 300, (v) => (title_state.fade5 = v));
+  if (!first_time || engine.DEBUG) {
     title_seq.update(30000);
   }
   first_time = false;
@@ -1859,5 +1927,5 @@ export function main() {
   });
 
   pumpMusic();
-  engine.setState(engine.DEBUG && false ? playInit : titleInit);
+  engine.setState(engine.DEBUG ? playInit : titleInit);
 }
