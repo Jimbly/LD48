@@ -720,7 +720,7 @@ class Level {
           if (tile === TILE_BRIDGE && next_level && next_level.isSolid(xx, yy)) {
             tile = TILE_BRIDGE_OVER_STONE;
           }
-          if (!canSeeThrough(tile) && cell.is_ore_vein) {
+          if (!canSeeThrough(tile) && cell.is_ore_vein || tile === TILE_GEM) {
             drawTwinkle({
               x: xx * TILE_W,
               y: yy * TILE_W,
@@ -935,7 +935,17 @@ class GameState {
     let dig_action;
     let ax = this.active_pos[0];
     let ay = this.active_pos[1];
-    if (!show_lower) {
+    if (show_lower) {
+      let { map } = this.cur_level;
+      for (let yy = 0; yy < this.h; ++yy) {
+        for (let xx = 0; xx < this.w; ++xx) {
+          if (map[yy][xx].lava_part) {
+            map[yy][xx].lava_part.kill_hard = true;
+            map[yy][xx].lava_part = null;
+          }
+        }
+      }
+    } else {
       this.cur_level.draw(Z.LEVEL, color_white, this.next_level, this.noise_3d);
       if (ax > 0 && ay > 0 && ax < this.w - 1 && ay < this.h - 1/* && !this.active_drills.length*/) {
         let tile = this.cur_level.get(ax, ay);
@@ -1735,7 +1745,7 @@ function title(dt) {
     'Use your Shovels to peek into the next level');
   y += ui.font_height + 4;
 
-  let x = (game_width - (icon_w + 4) * 8) / 2;
+  let x = (game_width - (icon_w) * 8) / 2;
   let ore_frame = 0;
   function drawTile(tile, twinkle) {
     sprite_tiles_ui.draw({
@@ -1743,6 +1753,14 @@ function title(dt) {
       frame: tile,
       color: colorFade(title_state.fade3),
     });
+    if (tile === TILE_GEM) {
+      sprite_tiles_ui.draw({
+        x, y, w: icon_w, h: icon_w,
+        z: Z.UI - 1,
+        frame: TILE_OPEN,
+        color: colorFade(title_state.fade3),
+      });
+    }
     if (twinkle) {
       drawTwinkle({
         x, y, w: icon_w/TILE_W, h: icon_w/TILE_W,
@@ -1752,7 +1770,7 @@ function title(dt) {
       });
       ++ore_frame;
     }
-    x += icon_w + 4;
+    x += icon_w;
   }
   drawTile(TILE_SOLID, false);
   drawTile(TILE_SOLID, true);
