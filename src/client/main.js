@@ -38,11 +38,11 @@ Z.PARTICLES = 20;
 Z.UI_TEST = 200;
 
 
-// const BOARD_W = 48;
-// const BOARD_H = 32;
 // const NOISE_FREQ_XY = 0.1;
 // const NOISE_FREQ_Z = 0.2;
 // const level_def = {
+//   w: 48,
+//   h: 32,
 //   num_rooms: 15,
 //   num_openings: 20,
 //   gems_per_floor: 100,
@@ -57,11 +57,11 @@ Z.UI_TEST = 200;
 //   drills_add: 5,
 // };
 const seedmod = 'e';
-const BOARD_W = 48/2;
-const BOARD_H = 32/2;
 const NOISE_FREQ_XY = 0.1;
 const NOISE_FREQ_Z = 0.2;
 const level_def = {
+  w: 48/2,
+  h: 32/2,
   num_rooms: 6,
   num_openings: 2,
   gems_per_floor: 20,
@@ -110,8 +110,6 @@ const DRILL_TIME = 400;
 const DRILL_TRIGGER_TIME = 600;
 
 const TILE_W = 16;
-const BOARD_W_PX = BOARD_W * TILE_W;
-const BOARD_H_PX = BOARD_H * TILE_W;
 const color_black = vec4(0,0,0,1);
 const color_white = vec4(1,1,1,1);
 const color_next_level = vec4(0.5,0.5,0.5,1);
@@ -329,8 +327,8 @@ let gems_found_at = 0;
 
 class Level {
   constructor(seed, noise_3d, level_idx) {
-    this.w = BOARD_W;
-    this.h = BOARD_H;
+    this.w = level_def.w;
+    this.h = level_def.h;
     this.particles = false;
     this.did_game_over_detect = false;
     this.ever_seen = false;
@@ -392,8 +390,8 @@ class Level {
     // for (let ii = 0; ii < num_rooms; ++ii) {
     //   let w = 2 + rand.range(8);
     //   let h = 2 + rand.range(8);
-    //   let x = 1 + rand.range(BOARD_W - w - 2);
-    //   let y = 1 + rand.range(BOARD_H - h - 2);
+    //   let x = 1 + rand.range(this.w - w - 2);
+    //   let y = 1 + rand.range(this.h - h - 2);
     //   for (let yy = 0; yy < h; ++yy) {
     //     for (let xx = 0; xx < w; ++xx) {
     //       map[y + yy][x + xx] = rand.random() < 0.05 ? TILE_BRIDGE : TILE_OPEN;
@@ -407,8 +405,8 @@ class Level {
     let aborts = 100;
     for (let ii = 0; ii < num_rooms; ++ii) {
       let size = level_def.room_min_size + rand.range(level_def.room_max_size - level_def.room_min_size + 1);
-      let x = 1 + rand.range(BOARD_W - 2);
-      let y = 1 + rand.range(BOARD_H - 2);
+      let x = 1 + rand.range(this.w - 2);
+      let y = 1 + rand.range(this.h - 2);
       if (map[y][x].tile !== TILE_SOLID) {
         ii--;
         if (!--aborts) {
@@ -429,7 +427,7 @@ class Level {
         let delta = ROOM_DELTA[rand.range(ROOM_DELTA.length)];
         let xx = pt[0] + delta[0];
         let yy = pt[1] + delta[1];
-        if (yy < 1 || yy >= BOARD_H - 1 || xx < 1 || xx >= BOARD_W - 1) {
+        if (yy < 1 || yy >= this.h - 1 || xx < 1 || xx >= this.w - 1) {
           continue;
         }
         if (map[yy][xx].tile !== TILE_SOLID) {
@@ -446,8 +444,8 @@ class Level {
     num_gem_sets = min(num_gem_sets, max(floor(num_gems/2), 2));
     aborts = 100;
     while (num_gem_sets) {
-      let x = 1 + rand.range(BOARD_W - 2);
-      let y = 1 + rand.range(BOARD_H - 2);
+      let x = 1 + rand.range(this.w - 2);
+      let y = 1 + rand.range(this.h - 2);
       let cell = map[y][x];
       if (cell.is_ore_vein && cell.tile !== TILE_GEM_UNLIT) {
         if (rand.random() < cell.ore_chance) {
@@ -470,7 +468,7 @@ class Level {
       let delta = GEM_DELTA[rand.range(GEM_DELTA.length)];
       let xx = pt[0] + delta[0];
       let yy = pt[1] + delta[1];
-      if (yy < 1 || yy >= BOARD_H - 1 || xx < 1 || xx >= BOARD_W - 1) {
+      if (yy < 1 || yy >= this.h - 1 || xx < 1 || xx >= this.w - 1) {
         continue;
       }
       let cell = map[yy][xx];
@@ -501,8 +499,8 @@ class Level {
     let { lava_min_size, lava_max_size } = level_def;
     aborts = 100;
     for (let ii = 0; ii < num_lava; ++ii) {
-      let x = 1 + rand.range(BOARD_W - 2);
-      let y = 1 + rand.range(BOARD_H - 2);
+      let x = 1 + rand.range(this.w - 2);
+      let y = 1 + rand.range(this.h - 2);
       if (map[y][x].tile !== TILE_SOLID) {
         if (!--aborts) {
           console.log('ABORT: num_lava');
@@ -520,7 +518,7 @@ class Level {
         let delta = LAVA_DELTA[rand.range(LAVA_DELTA.length)];
         let xx = pt[0] + delta[0];
         let yy = pt[1] + delta[1];
-        if (yy < 1 || yy >= BOARD_H - 1 || xx < 1 || xx >= BOARD_W - 1) {
+        if (yy < 1 || yy >= this.h - 1 || xx < 1 || xx >= this.w - 1) {
           continue;
         }
         if (map[yy][xx].tile !== TILE_SOLID) {
@@ -532,8 +530,8 @@ class Level {
     }
 
     // Paint cracked
-    for (let yy = 1; yy < BOARD_H - 1; ++yy) {
-      for (let xx = 1; xx < BOARD_W - 1; ++xx) {
+    for (let yy = 1; yy < this.h - 1; ++yy) {
+      for (let xx = 1; xx < this.w - 1; ++xx) {
         if (map[yy][xx].tile === TILE_SOLID) {
           let count = 0;
           for (let ii = 0; ii < DX.length; ++ii) {
@@ -582,8 +580,8 @@ class Level {
 
     // noise test
     if (NOISE_DEBUG) {
-      for (let yy = 1; yy < BOARD_H - 1; ++yy) {
-        for (let xx = 1; xx < BOARD_W - 1; ++xx) {
+      for (let yy = 1; yy < this.h - 1; ++yy) {
+        for (let xx = 1; xx < this.w - 1; ++xx) {
           map[yy][xx].lit = noise_3d(xx * NOISE_FREQ_XY, yy * NOISE_FREQ_XY, level_idx * NOISE_FREQ_Z);
         }
       }
@@ -596,9 +594,9 @@ class Level {
     // openings
     let possible_spots_good = [];
     let possible_spots_bad = [];
-    for (let yy = 0; yy < BOARD_H; ++yy) {
+    for (let yy = 0; yy < this.h; ++yy) {
       let row = map[yy];
-      for (let xx = 0; xx < BOARD_W; ++xx) {
+      for (let xx = 0; xx < this.w; ++xx) {
         if (player_pos[0] === xx && player_pos[1] === yy) {
           continue;
         }
@@ -720,8 +718,8 @@ class Level {
 
   activateParticles() {
     this.particles = true;
-    // for (let yy = 0; yy < BOARD_H; ++yy) {
-    //   for (let xx = 0; xx < BOARD_W; ++xx) {
+    // for (let yy = 0; yy < this.h; ++yy) {
+    //   for (let xx = 0; xx < this.w; ++xx) {
     //     if (this.map[yy][xx].tile === TILE_GEM && this.map[yy][xx].visible) {
     //       particle(xx, yy, 'gem_found');,
     //     }
@@ -755,7 +753,7 @@ class Level {
     for (let ii = 0; ii < dx_above.length; ++ii) {
       let xx = x + dx_above[ii];
       let yy = y + dy_above[ii];
-      if (xx < 0 || xx >= BOARD_W || yy < 0 || yy >= BOARD_H) {
+      if (xx < 0 || xx >= this.w || yy < 0 || yy >= this.h) {
         continue;
       }
       this.setCellVisible(xx, yy);
@@ -766,9 +764,9 @@ class Level {
     let { map } = this;
     let dvis = engine.frame_dt * 0.001;
     if (!NOISE_DEBUG) {
-      for (let yy = 0; yy < BOARD_H; ++yy) {
+      for (let yy = 0; yy < this.h; ++yy) {
         let row = map[yy];
-        for (let xx = 0; xx < BOARD_W; ++xx) {
+        for (let xx = 0; xx < this.w; ++xx) {
           let cell = row[xx];
           cell.lit = max(0, cell.lit - dvis);
         }
@@ -787,8 +785,9 @@ class Level {
   checkGameOver(pos, next_level) {
     let todo = [];
     let done = {};
+    let { w } = this;
     function add(pair) {
-      let key = pair[0] + pair[1] * BOARD_W;
+      let key = pair[0] + pair[1] * w;
       if (done[key]) {
         return;
       }
@@ -845,6 +844,10 @@ class GameState {
     this.active_drills = [];
     this.shovels = level_def.shovels_init;
     this.drills = level_def.drills_init;
+    this.w = level_def.w;
+    this.h = level_def.h;
+    this.w_px = this.w * TILE_W;
+    this.h_px = this.h * TILE_W;
   }
 
   setMainCamera() {
@@ -852,11 +855,11 @@ class GameState {
     let posx = this.pos[0] * TILE_W;
     let posy = this.pos[1] * TILE_W;
     let shift_start = TILE_W * 5;
-    let shiftx = clamp((posx - shift_start) / (BOARD_W_PX - shift_start * 2), 0, 1) * (BOARD_W_PX - game_width);
-    let shifty = clamp((posy - shift_start) / (BOARD_H_PX - shift_start * 2), 0, 1) * (BOARD_H_PX - game_height);
+    let shiftx = clamp((posx - shift_start) / (this.w_px - shift_start * 2), 0, 1) * (this.w_px - game_width);
+    let shifty = clamp((posy - shift_start) / (this.h_px - shift_start * 2), 0, 1) * (this.h_px - game_height);
     camera2d.shift(shiftx, shifty);
     if (debug_zoom) {
-      camera2d.setAspectFixed(BOARD_W_PX, BOARD_H_PX);
+      camera2d.setAspectFixed(this.w_px, this.h_px);
     }
   }
 
@@ -892,7 +895,7 @@ class GameState {
     let ay = this.active_pos[1];
     if (!show_lower) {
       this.cur_level.draw(Z.LEVEL, color_white, this.next_level, this.noise_3d);
-      if (ax > 0 && ay > 0 && ax < BOARD_W - 1 && ay < BOARD_H - 1/* && !this.active_drills.length*/) {
+      if (ax > 0 && ay > 0 && ax < this.w - 1 && ay < this.h - 1/* && !this.active_drills.length*/) {
         let tile = this.cur_level.get(ax, ay);
         if (this.shovels && tile === TILE_OPEN) {
           sprite_tiles.draw({
@@ -904,7 +907,7 @@ class GameState {
           for (let ii = 0; ii < DIG_DX.length; ++ii) {
             let yy = ay + DIG_DY[ii];
             let xx = ax + DIG_DX[ii];
-            if (xx <= 0 || yy <= 0 || xx >= BOARD_W - 1 || yy >= BOARD_H - 1) {
+            if (xx <= 0 || yy <= 0 || xx >= this.w - 1 || yy >= this.h - 1) {
               continue;
             }
             if (this.cur_level.get(xx, yy) === TILE_OPEN) {
@@ -925,7 +928,7 @@ class GameState {
           for (let ii = 0; ii < 5; ++ii) {
             let yy = ay + dy * ii;
             let xx = ax + dx * ii;
-            if (xx <= 0 || yy <= 0 || xx >= BOARD_W - 1 || yy >= BOARD_H - 1) {
+            if (xx <= 0 || yy <= 0 || xx >= this.w - 1 || yy >= this.h - 1) {
               break;
             }
             if (!this.cur_level.map[yy][xx].visible || !forceStopsDrill(this.cur_level.get(xx, yy))) {
@@ -1102,7 +1105,7 @@ class GameState {
           for (let ii = 0; ii < DIG_DX.length; ++ii) {
             let yy = this.active_pos[1] + DIG_DY[ii];
             let xx = this.active_pos[0] + DIG_DX[ii];
-            if (xx <= 0 || yy <= 0 || xx >= BOARD_W - 1 || yy >= BOARD_H - 1) {
+            if (xx <= 0 || yy <= 0 || xx >= this.w - 1 || yy >= this.h - 1) {
               continue;
             }
             if (this.cur_level.get(xx, yy) === TILE_OPEN) {
@@ -1216,7 +1219,7 @@ class GameState {
     pos[1] += DY[dir];
     xx = pos[0];
     yy = pos[1];
-    if (xx <= 0 || yy <= 0 || xx >= BOARD_W - 1 || yy >= BOARD_H - 1) {
+    if (xx <= 0 || yy <= 0 || xx >= this.w - 1 || yy >= this.h - 1) {
       ridx(this.active_drills, idx);
       particle(xx, yy, 'drill_stop');
       ui.playUISound('drill_stop');
@@ -1441,7 +1444,7 @@ function hudShared() {
 
   if ('tools on botttom') {
     y = game_height - ui.font_height - 4 * 2 - icon_size;
-    if (state.pos[1] > BOARD_H - 4) {
+    if (state.pos[1] > state.h - 4) {
       y = 4;
     }
     let x = game_width / 2 - icon_size - 8;
