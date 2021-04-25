@@ -5,12 +5,28 @@ Ludum Dare 45 Entry by Jimbly
 
 ### TODO
 
+?levels are just 2 floors - more shovels, less drills, not replenished
+  maybe more interesting high score, has theoretical, if annoying, optimal?
+    less good on the theme
+  separate endless mode?
+try significantly smaller floors - can we do screen size and still get parallax?
+  would do fewer tools per floor, and would need the floors to be more puzzle-y
+try infinite drills, scored to get all gems (probably also want smaller floors), limited shovels
+some indication of how well you're doing on current level
+  make gem count snap big and shrink whenever it increments
+  maybe display this floor's gem counter on top of each gem as a floater when it is found
+
 high scores
 main menu : restart
 tutorial?
+better world tiles - try completely different visuals?
 better character
-better world tiles
 balance / fun ?
+particles/glow on lava
+maybe show outline of walkable above area while viewing lower level
+touch countrols:
+  make view lower and zoom buttons for touch players
+  click location to move next to it and face it, click icon to trigger drill/dig
 
 ### Original brainstorming notes
 

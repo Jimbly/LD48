@@ -77,6 +77,7 @@ let sprite_timer;
 let sprite_solid;
 let sprite_tiles;
 let sprite_tiles_ui;
+let sprite_twinkle;
 let sprite_dwarf;
 let player_animation;
 let anim_drill;
@@ -256,12 +257,18 @@ const NOISE_FREQ_XY = 0.1;
 const NOISE_FREQ_Z = 0.2;
 
 class MapEntry {
-  constructor() {
+  constructor(x, y) {
     this.tile = TILE_SOLID;
+    this.lava_freq = 1;
     this.visible = false;
+    this.is_ore_vein = false;
+    this.is_ore_vein_edge = false;
+    this.ore_chance = 0;
+    this.ore_frame = floor(random() * 9);
     this.lit = 0;
   }
 }
+const dummy_cell = new MapEntry();
 
 class Level {
   constructor(seed, noise_3d, level_idx) {
@@ -270,12 +277,35 @@ class Level {
     this.particles = false;
     this.did_game_over_detect = false;
     let map = this.map = [];
-    for (let ii = 0; ii < this.h; ++ii) {
-      map[ii] = [];
-      for (let jj = 0; jj < this.w; ++jj) {
-        map[ii].push(new MapEntry());
+    for (let yy = 0; yy < this.h; ++yy) {
+      map[yy] = [];
+      for (let xx = 0; xx < this.w; ++xx) {
+        let cell = new MapEntry(xx, yy);
+        map[yy].push(cell);
+        cell.lava_freq = randSimpleSpatial(xx, yy, 0) * 0.001;
+        let r = noise_3d(xx * NOISE_FREQ_XY, yy * NOISE_FREQ_XY, level_idx * NOISE_FREQ_Z);
+        if (r < 0.5) {
+          cell.is_ore_vein = true;
+          r = 1 - r * 2;
+          cell.ore_chance = r * r;
+        }
       }
     }
+    // Fill is_ore_vein_edge
+    for (let yy = 0; yy < this.h; ++yy) {
+      for (let xx = 0; xx < this.w; ++xx) {
+        let cell = this.getCell(xx, yy);
+        if (cell.is_ore_vein) {
+          for (let ii = 0; ii < DX.length; ++ii) {
+            if (!this.getCell(xx + DX[ii], yy + DY[ii]).is_ore_vein) {
+              cell.is_ore_vein_edge = true;
+              break;
+            }
+          }
+        }
+      }
+    }
+
     let rand = this.rand = randCreate(seed);
     // rooms
     let num_rooms = this.num_rooms = 20;
@@ -333,13 +363,14 @@ class Level {
     while (num_gem_sets) {
       let x = 1 + rand.range(BOARD_W - 2);
       let y = 1 + rand.range(BOARD_H - 2);
-      if (map[y][x].tile !== TILE_GEM_UNLIT) {
-        if (rand.random()*rand.random() < noise_3d(x * NOISE_FREQ_XY, y * NOISE_FREQ_XY, level_idx * NOISE_FREQ_Z)) {
+      let cell = map[y][x];
+      if (cell.is_ore_vein && cell.tile !== TILE_GEM_UNLIT) {
+        if (rand.random() < cell.ore_chance) {
           continue;
         }
         --num_gems;
         --num_gem_sets;
-        map[y][x].tile = TILE_GEM_UNLIT;
+        cell.tile = TILE_GEM_UNLIT;
         gem_sets.push({ x, y, pts: [[x,y]] });
       }
     }
@@ -352,11 +383,12 @@ class Level {
       if (yy < 1 || yy >= BOARD_H - 1 || xx < 1 || xx >= BOARD_W - 1) {
         continue;
       }
-      if (map[yy][xx].tile === TILE_GEM_UNLIT) {
+      let cell = map[yy][xx];
+      if (cell.tile === TILE_GEM_UNLIT || !cell.is_ore_vein || cell.is_ore_vein_edge) {
         continue;
       }
       --num_gems;
-      map[yy][xx].tile = TILE_GEM_UNLIT;
+      cell.tile = TILE_GEM_UNLIT;
       set.pts.push([xx,yy]);
       if (delta.length > 2) {
         // xx = pt[0] + delta[2];
@@ -473,6 +505,13 @@ class Level {
     return this.map[y][x].tile;
   }
 
+  getCell(x, y) {
+    if (x < 0 || y < 0 || x >= this.w || y >= this.h) {
+      return dummy_cell;
+    }
+    return this.map[y][x];
+  }
+
   isSolid(x, y) {
     return isSolid(this.get(x, y));
   }
@@ -492,7 +531,7 @@ class Level {
           let lvalue = cell.lit;
           if (tile === TILE_LAVA) {
             lvalue = 1;
-            tile = TILE_LAVA + floor(randSimpleSpatial(xx, yy, 0) * engine.frame_timestamp * 0.001) % 3;
+            tile = TILE_LAVA + floor(cell.lava_freq * engine.frame_timestamp) % 3;
           }
           if (NOISE_DEBUG) {
             cc = v3lerp(temp_color, cell.lit, [0,0,0,1], [1,1,1,1]);
@@ -514,6 +553,22 @@ class Level {
           }
           if (tile === TILE_BRIDGE && next_level && next_level.isSolid(xx, yy)) {
             tile = TILE_BRIDGE_OVER_STONE;
+          }
+          if (!canSeeThrough(tile) && cell.is_ore_vein) {
+            sprite_twinkle.draw({
+              x: xx * TILE_W,
+              y: yy * TILE_W,
+              z: zz + 0.01,
+              frame: cell.ore_frame,
+              color: cc,
+            });
+            sprite_twinkle.draw({
+              x: xx * TILE_W,
+              y: yy * TILE_W,
+              z: zz + 0.01,
+              frame: ((cell.ore_frame + 4) % 9),
+              color: cc,
+            });
           }
           sprite_tiles.draw({
             x: xx * TILE_W,
@@ -1438,6 +1493,13 @@ export function main() {
     name: 'tiles',
     ws: [16, 16, 16, 16],
     hs: [16, 16, 16, 16],
+    origin: vec2(0,0),
+  });
+  sprite_twinkle = sprites.create({
+    name: 'twinkle',
+    size: vec2(TILE_W, TILE_W),
+    ws: [16, 16, 16],
+    hs: [16, 16, 16],
     origin: vec2(0,0),
   });
   player_animation = sprite_animation.create({
