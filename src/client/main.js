@@ -148,8 +148,8 @@ function canWalkThrough(tile) {
 }
 
 let NOISE_DEBUG = false;
-let debug_zoom = false;
-let debug_visible = false;
+let debug_zoom = engine.DEBUG;
+let debug_visible = debug_zoom;
 let debug_freecam = false;
 let random_seed = false;
 
@@ -645,7 +645,7 @@ class GameState {
     this.player_dir = 3; // down
     this.active_pos = vec2();
     this.shovels = 3;
-    this.drills = 0;
+    this.drills = 5;
   }
 
   setMainCamera() {
@@ -1209,6 +1209,7 @@ function play(dt) {
 
   if (engine.DEBUG) {
     if (input.keyDownEdge(KEYS.R)) {
+      random_seed = true;
       state = new GameState();
     }
     if (input.keyDownEdge(KEYS.V)) {
