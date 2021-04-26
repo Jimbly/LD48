@@ -14,6 +14,7 @@ Start with: `npm start` (after running `npm i` once)
 * Fix inconsistent player movement and visibility at very low framerates
 * Fix generic UI button sound playing when triggering digging with Space or controller A button
 * Fix tool count position being inconsistent if you descend while at the bottom of the screen
+* Fix score getting in the way of seeing some levels
 
 ### TODO
 

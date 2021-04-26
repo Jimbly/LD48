@@ -1479,12 +1479,16 @@ function hudShared(force_bottom) {
   let icon_size = ui.font_height * 2;
 
   let y = 0;
+  let style = style_overlay;
+  if (state.pos[1] < 2) {
+    style = font.styleAlpha(style, 0.5);
+  }
   if (state.level > 1) {
     sprite_tiles_ui.draw({
       x: game_width - 4 - icon_size, y, w: icon_size, h: icon_size, z: Z.UI,
       frame: TILE_GEM_UI,
     });
-    font.drawSizedAligned(style_overlay, game_width - 4 - icon_size, y, Z.UI, ui.font_height * 2,
+    font.drawSizedAligned(style, game_width - 4 - icon_size, y, Z.UI, ui.font_height * 2,
       font.ALIGN.HRIGHT, 0, 0,
       level_def.max_levels ? `Total: ${state.gems_found}/${state.gems_total}` :
         `Score: ${state.gems_found}`);
@@ -1501,13 +1505,13 @@ function hudShared(force_bottom) {
     found_font_size *= 1 + a * (found_all ? 1 : 0.5);
   }
   let gems_text = `${state.cur_level.gems_found}/${state.cur_level.gems_total}`;
-  let text_w = font.getStringWidth(style_overlay, ui.font_height * 2, gems_text);
-  font.drawSizedAligned(found_all ? style_found_all : style_overlay,
+  let text_w = font.getStringWidth(style, ui.font_height * 2, gems_text);
+  font.drawSizedAligned(found_all ? style_found_all : style,
     game_width - 4 - icon_size, y, Z.UI + 1, found_font_size,
     font.ALIGN.HRIGHT, 0, 0,
     gems_text);
   if (state.level > 1) {
-    font.drawSizedAligned(found_all ? style_found_all : style_overlay,
+    font.drawSizedAligned(found_all ? style_found_all : style,
       game_width - 4 - icon_size - text_w, y, Z.UI, ui.font_height * 2,
       font.ALIGN.HRIGHT, 0, 0,
       `Floor ${state.level}: `);
