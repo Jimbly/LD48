@@ -1055,7 +1055,7 @@ class GameState {
           dig_action = 'descend';
           if (!this.mustGoDown()) {
             if (!this.next_level.ever_seen) {
-              message = 'HINT: View the next floor (SHIFT) before descending';
+              message = `HINT: View the next floor ${input.pad_mod ? '(LT)' : '(SHIFT)'} before descending`;
               highlightTile(ax, ay, pico8.colors[8]);
             } else if (this.level === 1 && !this.gems_found) {
               message = 'HINT: Find some gems before descending';
