@@ -1155,11 +1155,12 @@ class GameState {
     this.next_level.draw(Z.LEVEL - 2, show_lower ? color_white : color_next_level, null, this.noise_3d);
     camera2d.setAspectFixed(game_width, game_height);
     if (dig_action === 'hole' || dig_action === 'drill') {
+      let do_button = input.keyDownEdge(KEYS.SPACE) || input.keyDownEdge(KEYS.E) || input.padButtonDownEdge(PAD.A);
       if (ui.button({
         text: `${input.pad_mode ? '[A]' : '[space]'} ${dig_action === 'hole' ? 'Dig hole' : 'Drill tunnel'}`,
         x: game_width - ui.button_width,
         y: game_height - ui.button_height,
-      }) || input.keyDownEdge(KEYS.SPACE) || input.keyDownEdge(KEYS.E) || input.padButtonDownEdge(PAD.A) || do_drill) {
+      }) || do_button || do_drill) {
         if (dig_action === 'hole') {
           --this.shovels;
           let good = false;
