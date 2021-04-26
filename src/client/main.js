@@ -39,7 +39,7 @@ Z.PARTICLES = 20;
 Z.UI_TEST = 200;
 
 
-const seedmod = 'c';//'e';
+const seedmod = 'e';
 const NOISE_FREQ_XY = 0.1;
 const NOISE_FREQ_Z = 0.2;
 const level_defs = {
