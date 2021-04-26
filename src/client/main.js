@@ -56,11 +56,13 @@ const level_defs = {
     room_max_size: 64,
     lava_min_size: 32,
     lava_max_size: 96,
+    lava_max: 12,
     shovels_init: 3,
     drills_init: 5,
     shovels_add: 6,
     drills_add: 5,
     random_seed: true,
+    holes: 4,
   },
   score_attack: {
     score_idx: 0,
@@ -75,6 +77,7 @@ const level_defs = {
     room_max_size: 28,
     lava_min_size: 16,
     lava_max_size: 32,
+    lava_max: Infinity,
     shovels_init: 3,
     drills_init: 5,
     shovels_add: 2,
@@ -527,7 +530,7 @@ class Level {
     }
 
     // Lava
-    let num_lava = level_idx;
+    let num_lava = min(level_idx, level_def.lava_max);
     let { lava_min_size, lava_max_size } = level_def;
     aborts = 100;
     for (let ii = 0; ii < num_lava; ++ii) {
@@ -1553,11 +1556,11 @@ function play(dt) {
   gl.clearColor(0, 0, 0, 1);
 
   if (state.pos[0] > 4 || state.pos[1] > 3) {
-    ui.print(style_overlay, 4, 4, Z.UI, `${input.pad_mode ? '[LT]' : '[Shift]'} - view floor below`);
-    ui.print(style_overlay, 4, 4+ui.font_height, Z.UI, `${input.pad_mode ? '[Stick]' : '[WASD]'} - move`);
-    ui.print(style_overlay, 4, 4+ui.font_height*2, Z.UI, `${input.pad_mode ? '[B]' : '[Esc]'} - menu`);
+    ui.print(style_overlay, 4, 2, Z.UI, `${input.pad_mode ? '[LT]' : '[Shift]'} - view floor below`);
+    ui.print(style_overlay, 4, 2+ui.font_height, Z.UI, `${input.pad_mode ? '[Stick]' : '[WASD]'} - move`);
+    ui.print(style_overlay, 4, 2+ui.font_height*2, Z.UI, `${input.pad_mode ? '[B]' : '[Esc]'} - menu`);
     if (level_def.w > 24) {
-      ui.print(style_overlay, 4, 4+ui.font_height*3, Z.UI, `${input.pad_mode ? '[RT]' : '[Z]'} - zoom out`);
+      ui.print(style_overlay, 4, 2+ui.font_height*3, Z.UI, `${input.pad_mode ? '[RT]' : '[Z]'} - zoom out`);
     }
   }
 
@@ -1635,6 +1638,8 @@ function descend(dt) {
   hudShared();
 }
 function descendInit(dt) {
+  // eslint-disable-next-line no-use-before-define
+  killFX();
   engine.setState(descend);
   descend(dt);
 }
