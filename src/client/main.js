@@ -2029,7 +2029,7 @@ function highScore(dt) {
   need_player_name_update = false;
   showHighScores(0, y, 0);
   showHighScores(game_width / 2, y, 1);
-  ui.drawRect(game_width/2, y, game_width - 2, game_height - 2 - 16 - 2, Z.UI - 10, pico8.colors[1]);
+  ui.drawRect(game_width/2, y - 2, game_width - 2, game_height - 2 - 16 - 2, Z.UI - 11, pico8.colors[1]);
   doPlayerNameUpdate();
 }
 function highScoreInit(dt) {
@@ -2056,6 +2056,7 @@ export function main() {
   } else {
     font = { info: font_info_palanquin32, texture: 'font/palanquin32' };
   }
+  title_font = { info: require('./img/font/vga_16x2.json'), texture: 'font/vga_16x2' };
 
   let ui_sounds = {
     gem_found: ['pickup1b', 'pickup1b', 'pickup1b', 'pickup1b', 'pickup2b', 'pickup3b', 'pickup4b', 'pickup5b'],
@@ -2073,6 +2074,7 @@ export function main() {
     game_height,
     pixely,
     font,
+    title_font,
     viewport_postprocess: false,
     antialias: false,
     ui_sounds,
