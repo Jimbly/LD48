@@ -10,6 +10,8 @@ Ludum Dare 48 Entry by Jimbly - "Dwarven Surveyor"
 
 Start with: `npm start` (after running `npm i` once)
 
+### Post-Compo bug fixes:
+* Fix inconsistent player movement and visibility at very low framerates
 
 ### TODO
 

@@ -800,9 +800,9 @@ class Level {
     }
   }
 
-  tickVisibility(x0, y0) {
+  tickVisibility(x0, y0, dt) {
     let { map } = this;
-    let dvis = engine.frame_dt * 0.001;
+    let dvis = dt * 0.001;
     if (!NOISE_DEBUG) {
       for (let yy = 0; yy < this.h; ++yy) {
         let row = map[yy];
@@ -863,7 +863,7 @@ function highlightTile(xx, yy, color) {
 }
 
 let descend_anim;
-
+let temp_v2 = vec2();
 class GameState {
   constructor() {
     this.gems_found = 0;
@@ -933,7 +933,6 @@ class GameState {
     this.setMainCamera();
     let posx = this.pos[0] * TILE_W;
     let posy = this.pos[1] * TILE_W;
-    this.cur_level.tickVisibility(this.pos[0], this.pos[1]);
     let show_lower = input.keyDown(KEYS.SHIFT) || input.padButtonDown(PAD.LEFT_TRIGGER);
     if (show_lower) {
       this.next_level.ever_seen = true;
@@ -1263,9 +1262,9 @@ class GameState {
 
   }
 
-  updateDrill(idx) {
+  updateDrill(idx, dt) {
     let active_drill = this.active_drills[idx];
-    active_drill.countdown -= engine.frame_dt;
+    active_drill.countdown -= dt;
     if (active_drill.countdown > 0) {
       return;
     }
@@ -1318,28 +1317,40 @@ class GameState {
     this.player_dir = dir;
   }
 
-  update() {
-    for (let ii = this.active_drills.length - 1; ii >= 0; --ii) {
-      this.updateDrill(ii);
-    }
+  update(dt) {
     let dx = 0;
     dx -= input.keyDown(KEYS.LEFT) + input.keyDown(KEYS.A) + input.padButtonDown(PAD.LEFT);
     dx += input.keyDown(KEYS.RIGHT) + input.keyDown(KEYS.D) + input.padButtonDown(PAD.RIGHT);
     let dy = 0;
     dy -= input.keyDown(KEYS.UP) + input.keyDown(KEYS.W) + input.padButtonDown(PAD.UP);
     dy += input.keyDown(KEYS.DOWN) + input.keyDown(KEYS.S) + input.padButtonDown(PAD.DOWN);
-    if (sqrt(dx * dx + dy * dy) > engine.frame_dt) {
-      let temp = v2scale([], v2normalize([], [dx, dy]), engine.frame_dt);
-      dx = temp[0];
-      dy = temp[1];
+    // Get normalized direction
+    let dir = v2scale(temp_v2, [dx, dy], 1/dt);
+    if (v2lengthSq(dir) > 1) {
+      v2normalize(dir, dir);
+    }
+    dx = dir[0];
+    dy = dir[1];
+
+    let total_dt = dt;
+    while (total_dt) {
+      dt = min(16, total_dt);
+      total_dt -= dt;
+      this.updateSub(dx, dy, dt);
+    }
+  }
+
+  updateSub(dx, dy, dt) {
+    for (let ii = this.active_drills.length - 1; ii >= 0; --ii) {
+      this.updateDrill(ii, dt);
     }
     let { pos, cur_level } = this;
     let ix = floor(pos[0]);
     let iy = floor(pos[1]);
     let speed = 0.005;
-    const threshold = 0.001 / engine.frame_dt;
+    const threshold = 0.01;
     if (abs(dx) + abs(dy)) {
-      this.run_time += engine.frame_dt;
+      this.run_time += dt;
       if (this.run_time > 800) {
         speed *= 1.5;
       }
@@ -1366,10 +1377,8 @@ class GameState {
       this.run_time = 0;
     }
 
-    dx *= speed;
-    dy *= speed;
-    let x2 = pos[0] + dx;
-    let y2 = pos[1] + dy;
+    let x2 = pos[0] + dx * speed * dt;
+    let y2 = pos[1] + dy * speed * dt;
     const PLAYER_R = 0.25;
     if (!debug_freecam) {
       let xleft = floor(x2 - PLAYER_R);
@@ -1415,7 +1424,7 @@ class GameState {
     if (!dx && !dy) {
       // normalize to center
       const NORMALIZE_DIST = 0.4;
-      let max_dist = engine.frame_dt * 0.002;
+      let max_dist = dt * 0.002;
       let delta = [0, 0];
       for (let ii = 0; ii < 2; ii++) {
         let ipos = floor(pos[ii]);
@@ -1455,6 +1464,8 @@ class GameState {
         });
       }
     }
+
+    this.cur_level.tickVisibility(this.pos[0], this.pos[1], dt);
   }
 }
 
@@ -1586,7 +1597,7 @@ function play(dt) {
   } else {
     debug_zoom = input.keyDown(KEYS.Z) || input.padButtonDown(PAD.RIGHT_TRIGGER);
   }
-  state.update();
+  state.update(dt);
   state.draw();
   if (engine.DEBUG && input.keyDownEdge(KEYS.F3)) {
     state.cur_level.activateParticles();
@@ -1735,7 +1746,7 @@ function title(dt) {
     x: game_width / 2 - icon_w / 2,
     y,
     w: icon_w, h: icon_w,
-    frame: anim_drill.getFrame(engine.frame_dt),
+    frame: anim_drill.getFrame(dt),
     color: colorFade(title_state.fade1),
   });
   y += icon_w;
