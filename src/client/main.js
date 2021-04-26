@@ -99,17 +99,17 @@ const game_height = 256;
 
 const TILE_SOLID = 0;
 const TILE_LAVA = 1; // 2, 3
-const TILE_OPEN = 4;
-const TILE_BRIDGE = 5;
-const TILE_PIT = 7;
-const TILE_BRIDGE_OVER_STONE = 8;
-const TILE_GEM = 9;
-const TILE_GEM_UI = 10;
-const TILE_GEM_UNLIT = 11;
-const TILE_CRACKED_1 = 12;
-const TILE_CRACKED_2 = 13;
-const TILE_CRACKED_3 = 14;
-const TILE_SHOVEL = 15;
+const TILE_OPEN = 4; // 5, 6
+const TILE_BRIDGE = 7;
+const TILE_PIT = 9;
+const TILE_BRIDGE_OVER_STONE = 10;
+const TILE_GEM = 11;
+const TILE_GEM_UI = 12;
+const TILE_GEM_UNLIT = 13;
+const TILE_CRACKED_1 = 14;
+const TILE_CRACKED_2 = 15;
+const TILE_CRACKED_3 = 16;
+const TILE_SHOVEL = 17;
 
 const DRILL_TIME = 400;
 // const DIG_LEN = 5;
@@ -720,6 +720,9 @@ class Level {
           if (tile === TILE_BRIDGE && next_level && next_level.isSolid(xx, yy)) {
             tile = TILE_BRIDGE_OVER_STONE;
           }
+          if (tile === TILE_OPEN) {
+            tile += cell.ore_frame % 3;
+          }
           if (!canSeeThrough(tile) && cell.is_ore_vein || tile === TILE_GEM) {
             drawTwinkle({
               x: xx * TILE_W,
@@ -1049,7 +1052,7 @@ class GameState {
           dig_action = 'descend';
           if (!this.mustGoDown()) {
             if (!this.next_level.ever_seen) {
-              message = 'HINT: View the next level (SHIFT) before descending';
+              message = 'HINT: View the next floor (SHIFT) before descending';
               highlightTile(ax, ay, pico8.colors[8]);
             } else if (this.level === 1 && !this.gems_found) {
               message = 'HINT: Find some gems before descending';
@@ -1109,6 +1112,10 @@ class GameState {
         highlightTile(ax, ay, [0.1,0.1,0.1,1]);
         message_style = style_hint;
       }
+    }
+    if (show_lower && !message) {
+      message = `You get +${level_def.shovels_add} Shovels and +${level_def.drills_add} Drills per floor`;
+      message_style = style_hint;
     }
     // if (this.active_drills.length) {
     //   dig_action = null;
@@ -1546,7 +1553,7 @@ function play(dt) {
   gl.clearColor(0, 0, 0, 1);
 
   if (state.pos[0] > 4 || state.pos[1] > 3) {
-    ui.print(style_overlay, 4, 4, Z.UI, `${input.pad_mode ? '[LT]' : '[Shift]'} - view level below`);
+    ui.print(style_overlay, 4, 4, Z.UI, `${input.pad_mode ? '[LT]' : '[Shift]'} - view floor below`);
     ui.print(style_overlay, 4, 4+ui.font_height, Z.UI, `${input.pad_mode ? '[Stick]' : '[WASD]'} - move`);
     ui.print(style_overlay, 4, 4+ui.font_height*2, Z.UI, `${input.pad_mode ? '[B]' : '[Esc]'} - menu`);
     if (level_def.w > 24) {
@@ -1729,7 +1736,7 @@ function title(dt) {
   y += icon_w;
   font.drawSizedAligned(glov_font.styleAlpha(subtitle_style, title_state.fade1),
     0, y, Z.UI, ui.font_height, font.ALIGN.HCENTER, game_width, 0,
-    'Use your Drills to find Gems on the current level');
+    'Use Drills to find Gems on the current floor.');
   y += ui.font_height + 4;
 
   sprite_tiles_ui.draw({
@@ -1742,7 +1749,7 @@ function title(dt) {
   y += icon_w;
   font.drawSizedAligned(glov_font.styleAlpha(subtitle_style, title_state.fade2),
     0, y, Z.UI, ui.font_height, font.ALIGN.HCENTER, game_width, 0,
-    'Use your Shovels to peek into the next level');
+    'Use Shovels to peek into the next floor.');
   y += ui.font_height + 4;
 
   let x = (game_width - (icon_w) * 8) / 2;
@@ -1783,12 +1790,16 @@ function title(dt) {
   y += icon_w;
   font.drawSizedAligned(glov_font.styleAlpha(subtitle_style, title_state.fade3),
     0, y, Z.UI, ui.font_height, font.ALIGN.HCENTER, game_width, 0,
-    'Cracks in rocks indicate there are 1, 2, or 3 adjacent Gems');
+    'Cracks in rocks indicate there are 1, 2, or 3 adjacent Gems.');
   y += ui.font_height + 2;
 
   font.drawSizedAligned(glov_font.styleAlpha(subtitle_style, title_state.fade3),
     0, y, Z.UI, ui.font_height, font.ALIGN.HCENTER, game_width, 0,
-    'Gems are only found near yellow sparkles');
+    'Gems are only found near yellow sparkles.');
+  y += ui.font_height + 2;
+  font.drawSizedAligned(glov_font.styleAlpha(subtitle_style, title_state.fade3),
+    0, y, Z.UI, ui.font_height, font.ALIGN.HCENTER, game_width, 0,
+    'Press ESC at any time to review this information.');
   y += ui.font_height + 4;
 
   y = game_height - ui.button_height * 2 - 12;
@@ -2076,13 +2087,13 @@ export function main() {
     name: 'tiles',
     size: vec2(TILE_W, TILE_W),
     ws: [16, 16, 16, 16],
-    hs: [16, 16, 16, 16],
+    hs: [16, 16, 16, 16, 16],
     origin: vec2(0,0),
   });
   sprite_tiles_ui = sprites.create({
     name: 'tiles',
     ws: [16, 16, 16, 16],
-    hs: [16, 16, 16, 16],
+    hs: [16, 16, 16, 16, 16],
     origin: vec2(0,0),
   });
   sprite_twinkle = sprites.create({
