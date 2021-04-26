@@ -15,6 +15,7 @@ Start with: `npm start` (after running `npm i` once)
 * Fix generic UI button sound playing when triggering digging with Space or controller A button
 * Fix tool count position being inconsistent if you descend while at the bottom of the screen
 * Fix score getting in the way of seeing some levels
+* Fix auto-dig time too small for non-arcadey players
 
 ### TODO
 

@@ -116,7 +116,7 @@ const TILE_SHOVEL = 17;
 
 const DRILL_TIME = 400;
 // const DIG_LEN = 5;
-const DRILL_TRIGGER_TIME = 600;
+const DRILL_TRIGGER_TIME = 1000;
 
 const TILE_W = 16;
 const color_black = vec4(0,0,0,1);
