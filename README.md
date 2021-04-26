@@ -1,4 +1,4 @@
-Untitled - LD48 - Deeper and deeper
+Dwarven surveyor - LD48 - Deeper and deeper
 ============================
 
 Ludum Dare 45 Entry by Jimbly
