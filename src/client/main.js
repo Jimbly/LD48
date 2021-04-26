@@ -1475,7 +1475,7 @@ function colorCount(count) {
     pico8.font_colors[9] : count ? pico8.font_colors[7] : pico8.font_colors[8]);
 }
 
-function hudShared() {
+function hudShared(force_bottom) {
   let icon_size = ui.font_height * 2;
 
   let y = 0;
@@ -1521,7 +1521,7 @@ function hudShared() {
 
   if ('tools on botttom') {
     y = game_height - ui.font_height - 4 * 2 - icon_size;
-    if (state.pos[1] > state.h - 4) {
+    if (state.pos[1] > state.h - 4 && !force_bottom) {
       y = 4;
     }
     let x = game_width / 2 - icon_size - 8;
@@ -1647,7 +1647,7 @@ function descend(dt) {
   font.drawSizedAligned(style_overlay, game_width/2, game_height/2, Z.UI,
     ui.font_height * 2, font.ALIGN.HVCENTER, 0, 0,
     `Level ${state.level}${level_def.max_levels ? ` / ${level_def.max_levels}` : ''}`);
-  hudShared();
+  hudShared(true);
 }
 function descendInit(dt) {
   // eslint-disable-next-line no-use-before-define
