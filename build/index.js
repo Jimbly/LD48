@@ -17,7 +17,6 @@ const gb = require('glov-build');
 const eslint = require('./eslint.js');
 const exec = require('./exec.js');
 const fs = require('fs');
-const imgproc = require('./imgproc.js');
 const json5 = require('./json5.js');
 const gulpish_tasks = require('./gulpish-tasks.js');
 const path = require('path');
@@ -45,14 +44,6 @@ function copy(job, done) {
   job.out(job.getFile());
   done();
 }
-
-gb.task({
-  name: 'client_img_proc',
-  input: config.img_proc,
-  target: 'dev',
-  ...imgproc()
-});
-
 
 gb.task({
   name: 'client_static',
@@ -135,6 +126,10 @@ gb.task({
   target: 'dev',
   ...json5({ beautify: true })
 });
+
+for (let ii = 0; ii < config.client_register_cbs.length; ++ii) {
+  config.client_register_cbs[ii](gb);
+}
 
 gb.task({
   name: 'client_js_babel_files',
@@ -323,7 +318,7 @@ function addStarStar(a) {
 }
 
 let client_tasks = [
-  'client_img_proc',
+  ...config.extra_client_tasks,
   'client_static',
   'client_css',
   'client_fsdata',

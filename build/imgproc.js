@@ -1,4 +1,22 @@
 /* eslint max-len:off */
+/*
+  To use, in config.local.js, add:
+
+  const imgproc = require('./imgproc.js');
+
+  let img_proc = 'client/img/proc/*.png';
+  config.client_static.push(`!${img_proc}`);
+  config.client_register_cbs.push((gb) => {
+    config.extra_client_tasks.push('client_img_proc');
+    gb.task({
+      name: 'client_img_proc',
+      input: img_proc,
+      target: 'dev',
+      ...imgproc()
+    });
+  });
+
+*/
 const gb = require('glov-build');
 const { floor } = Math;
 const { PNG } = require('pngjs');
