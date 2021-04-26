@@ -325,7 +325,7 @@ export function soundPlayMusic(soundname, volume, transition) {
     volume = 1;
   }
   transition = transition || FADE_DEFAULT;
-  soundLoad(soundname, { streaming: true, loop: false/*donotcheckin*/ }, (err) => {
+  soundLoad(soundname, { streaming: true, loop: false/*donotmerge*/ }, (err) => {
     assert(!err);
     let sound = sounds[soundname];
     assert(sound);
