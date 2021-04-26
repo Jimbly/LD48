@@ -1,9 +1,15 @@
 Dwarven surveyor - LD48 - Deeper and deeper
 ============================
 
-Ludum Dare 45 Entry by Jimbly
+Ludum Dare 48 Entry by Jimbly - "Dwarven Surveyor"
 
-Balance locating gems on the current floor against scouting out the next floor in this procedural puzzle game.
+> Balance locating gems on the current floor against scouting out the next floor in this procedural puzzle game.
+
+* Play here: [http://www.dashingstrike.com/LudumDare/LD48/](dashingstrike.com/LudumDare/LD48/)
+* Using [Javascript libGlov/GLOV.js framework](https://github.com/Jimbly/glovjs)
+
+Start with: `npm start` (after running `npm i` once)
+
 
 ### TODO
 
