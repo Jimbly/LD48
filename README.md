@@ -3,6 +3,8 @@ Untitled - LD48 - Deeper and deeper
 
 Ludum Dare 45 Entry by Jimbly
 
+Balance locating gems on the current floor against scouting out the next floor in this procedural puzzle game.
+
 ### TODO
 
 touch controls:
