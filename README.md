@@ -11,11 +11,12 @@ Ludum Dare 48 Entry by Jimbly - "Dwarven Surveyor"
 Start with: `npm start` (after running `npm i` once)
 
 ### Post-Compo bug fixes:
+* Fix audio loading issues on Firefox
 * Fix inconsistent player movement and visibility at very low framerates
 * Fix generic UI button sound playing when triggering digging with Space or controller A button
 * Fix tool count position being inconsistent if you descend while at the bottom of the screen
 * Fix score getting in the way of seeing some levels
-* Fix auto-dig time too small for non-arcadey players
+* Fix auto-dig firing too soon for some players
 
 ### TODO
 
